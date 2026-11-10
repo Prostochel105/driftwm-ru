@@ -642,10 +642,11 @@ final class CanvasView extends View {
         centered.setTextSize(12f);
         centered.setColor(accent);
         float ty = r.centerY() + 4.2f;
-        c.drawText(TOOL_LABEL[tool], r.centerX(), ty, centered);
+        String label = L.t(TOOL_LABEL[tool]);
+        c.drawText(label, r.centerX(), ty, centered);
         if (preview && !on) {
             // Preview hidden for this card: strike the label through.
-            float half = centered.measureText(TOOL_LABEL[tool]) / 2f;
+            float half = centered.measureText(label) / 2f;
             stroke.setColor(pal.textDim);
             stroke.setStrokeWidth(1.4f);
             c.drawLine(r.centerX() - half, ty - 3.6f, r.centerX() + half, ty - 3.6f, stroke);

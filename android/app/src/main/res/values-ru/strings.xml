@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Drift</string>
+    <string name="thumb_service_label">Drift: превью приложений</string>
+    <string name="thumb_service_desc">Сохраняет маленький снимок приложения, которым вы пользуетесь, чтобы Drift мог показать его на карточке. Служба не читает текст на экране, пароли и уведомления. Снимки не покидают телефон.</string>
+</resources>

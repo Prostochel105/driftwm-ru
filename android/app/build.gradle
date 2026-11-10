@@ -37,6 +37,17 @@ android {
         ndk { abiFilters(*abis) }
     }
 
+    signingConfigs {
+        debug {
+            // Fixed debug key committed to the repo so that every CI build can be
+            // installed over the previous one without uninstalling (layout kept).
+            storeFile file('drift-ru-debug.keystore')
+            storePassword 'driftru'
+            keyAlias 'driftru'
+            keyPassword 'driftru'
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -55,4 +66,8 @@ android {
     }
 }
 
-preBuild.dependsOn 'cargoNdk'
+if (project.hasProperty('skipRust')) {
+    cargoNdk.configure { enabled = false }
+} else {
+    preBuild.dependsOn 'cargoNdk'
+}

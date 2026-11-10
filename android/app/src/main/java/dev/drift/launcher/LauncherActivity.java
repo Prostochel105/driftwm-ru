@@ -233,7 +233,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
             drawer.hide();
         }
         if (!repo.launch(key)) {
-            toast("Can't open " + repo.label(key));
+            toast(L.t("Can't open ", "Не удалось открыть ") + repo.label(key));
             repo.scheduleRefresh();
         }
     }
@@ -331,9 +331,9 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
     }
 
     private void showDockMenu(int slot) {
-        String[] items = {"Replace app", "Remove from dock"};
+        String[] items = {L.t("Replace app"), L.t("Remove from dock")};
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Dock slot " + (slot + 1))
+            .setTitle(L.t("Dock slot ", "Слот дока ") + (slot + 1))
             .setItems(items, (d, which) -> {
                 if (which == 0) {
                     Native.dockReplace(slot);
@@ -415,7 +415,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         col.setPadding(p, p * 3, p, p * 3);
         col.setBackgroundColor(0xFF101216);
         TextView head = new TextView(this);
-        head.setText("Drift crashed. Details (select and copy, or send to the developer):");
+        head.setText(L.t("Drift crashed. Details (select and copy, or send to the developer):"));
         head.setTextColor(0xFFE5766B);
         head.setTextSize(15);
         col.addView(head);
@@ -429,7 +429,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         sv.addView(body);
         col.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         Button retry = new Button(this);
-        retry.setText("Clear report and retry");
+        retry.setText(L.t("Clear report and retry"));
         retry.setOnClickListener(v -> {
             crashFile().delete();
             recreate();
@@ -442,7 +442,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
 
     private void toast(String msg) {
         if (toast != null) toast.cancel();
-        toast = Toast.makeText(this, msg, Toast.LENGTH_SHORT);
+        toast = Toast.makeText(this, L.toast(msg), Toast.LENGTH_SHORT);
         toast.show();
     }
 

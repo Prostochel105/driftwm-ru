@@ -66,7 +66,7 @@ final class DrawerView extends LinearLayout {
         addView(title, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         search = new EditText(context);
-        search.setHint("Search apps");
+        search.setHint(L.t("Search apps"));
         search.setTextSize(16);
         search.setSingleLine(true);
         search.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -89,7 +89,7 @@ final class DrawerView extends LinearLayout {
 
         // Entry to Drift's own settings; shown in the normal list (and when the search matches it).
         settingsRow = new TextView(context);
-        settingsRow.setText("Drift settings  \u203A");
+        settingsRow.setText(L.t("Drift settings  \u203A"));
         settingsRow.setTextSize(16);
         settingsRow.setTypeface(Typeface.DEFAULT_BOLD);
         settingsRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -152,7 +152,7 @@ final class DrawerView extends LinearLayout {
     void show(int slot) {
         slotMode = slot;
         if (slot >= 0) {
-            title.setText("Choose an app for dock slot " + (slot + 1));
+            title.setText(L.t("Choose an app for dock slot ") + (slot + 1));
             title.setVisibility(VISIBLE);
         } else {
             title.setVisibility(GONE);
@@ -187,7 +187,7 @@ final class DrawerView extends LinearLayout {
         String[] found = Native.searchApps(search.getText().toString());
         keys = found == null ? new String[0] : found;
         String q = search.getText().toString().trim().toLowerCase(java.util.Locale.ROOT);
-        boolean matches = q.isEmpty() || "drift settings".contains(q);
+        boolean matches = L.settingsMatches(q);
         settingsRow.setVisibility(slotMode < 0 && matches ? VISIBLE : GONE);
         adapter.notifyDataSetChanged();
     }

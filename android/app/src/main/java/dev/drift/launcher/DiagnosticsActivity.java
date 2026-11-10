@@ -62,13 +62,13 @@ public final class DiagnosticsActivity extends Activity {
         });
 
         TextView head = new TextView(this);
-        head.setText("Drift: system navigation check\nRun this while Drift is the selected home app.");
+        head.setText(L.t("Drift: system navigation check\nRun this while Drift is the selected home app."));
         head.setTextColor(0xFF7AA2FF);
         head.setTextSize(15);
         col.addView(head);
 
         body = new TextView(this);
-        body.setText("Collecting...");
+        body.setText(L.t("Collecting..."));
         body.setTextColor(0xFFE6E8EC);
         body.setTextSize(11);
         body.setTypeface(Typeface.MONOSPACE);
@@ -80,17 +80,17 @@ public final class DiagnosticsActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         Button copy = new Button(this);
-        copy.setText("Copy");
+        copy.setText(L.t("Copy"));
         copy.setOnClickListener(v -> {
             ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Drift report", report));
-            Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, L.t("Copied"), Toast.LENGTH_SHORT).show();
         });
         Button share = new Button(this);
-        share.setText("Share");
+        share.setText(L.t("Share"));
         share.setOnClickListener(v -> {
             Intent i = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, report);
-            startActivity(Intent.createChooser(i, "Send report"));
+            startActivity(Intent.createChooser(i, L.t("Send report")));
         });
         row.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         row.addView(share, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));

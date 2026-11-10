@@ -1,76 +1,120 @@
-# DriftWM for Android
+# DriftWM RU
 
-An Android port of [DriftWM](https://github.com/malbiruk/driftwm), bringing its window management experience to Android devices
+Russian localization and a redesigned settings screen for
+[DriftWM for Android](https://github.com/StepaandAlex69/DriftWM-for-Android).
 
-## About
+Based on upstream **V5**. Licensed under **GPL-3.0**, same as the original.
 
-DriftWM for Android is a community-developed fork of the original DriftWM project, adapted to work on Android
+> Русская версия описания: [README-RU.md](README-RU.md)
 
-The goal of this project is to bring the original project's features and design to Android while maintaining its core philosophy
+## What this fork adds
 
-## Features
+- **Full Russian UI.** The language follows the system locale: Russian on a Russian phone,
+  English everywhere else.
+- **A real settings screen.** Live home-screen preview, six ready-made themes, colour pickers,
+  background picture with static/infinite modes, and quick system shortcuts.
+- **Status at a glance.** The settings screen shows whether the preview accessibility service is
+  enabled and whether the launcher is exempt from battery optimisation, and opens the right system
+  page in one tap.
+- **Built-in gesture reference.** A Russian help sheet explains tap, double tap, drag, pinch and
+  three-finger navigation without leaving the settings screen.
+- **Updates that keep your layout.** The repository contains a fixed debug signing key
+  (`android/app/drift-ru-debug.keystore`), so every APK built here installs **over** the previous
+  one. No uninstall, no lost cards.
+- **CI builds.** GitHub Actions builds the APK on every push and uploads it as an artifact.
 
-- Android-compatible implementation
-- Adapted from the original DriftWM project
-- Tested on multiple real Android devices
+## Settings screen
 
-## Requirements
+| Section | What you can do |
+|---|---|
+| **Theme** | Preview the home screen and apply one of six themes: Graphite, Midnight, Forest, Warm, Light, Rose |
+| **Background** | Colours or your own picture; static wallpaper or an infinite tile attached to the canvas |
+| **Interface** | One accent colour that derives cards, dock, buttons, text and the app list |
+| **Quick actions** | Accessibility previews (with On/Off status), battery optimisation (with status), diagnostics, app info, gesture reference |
+| **About** | Version, source link, license |
 
-- **Minimum:** Android 11 (API 30)
-- **Recommended:** Android 16 (API 36)
-- **Target SDK:** 36
+## Install
 
-Android 11 and newer are supported, but Android 16 is recommended for the best experience
+The upstream Drift is signed with a different key, so the first install requires removing it.
 
-## Installation and Setup
+1. Set your stock launcher as the home app: **Settings → Apps → Default apps → Home app**.
+2. Uninstall the original Drift. This deletes `workspace.json` (the card layout).
+3. Install the APK from this repository (allow installation from unknown sources).
+4. Set Drift as the home app again.
+5. Open **Drift settings → Quick actions** and enable previews and unrestricted battery.
 
-### Step 1: Install DriftWM and set it as the default launcher
+After that, updates install over the old version and keep all data.
 
-1. Download the latest APK from the [Releases](../../releases/latest) page
-2. Open the downloaded APK on your Android device
-3. Allow installation from this source if Android asks for permission
-4. Follow the on-screen instructions to install the application
-5. Open your phone's **Settings** and find **Default apps** (the exact name may vary by device)
-6. Open the **Home app** or **Default launcher** setting and select **Drift**
+## Build
 
-If you cannot find the setting, use the search bar in your phone's Settings and search for **Default apps** or **Home app**
+### GitHub Actions
 
-### Step 2: Enable Drift Preview for thumbnails
+Push to `main`/`master` or run the **build-apk** workflow manually.
+The APK appears in the `drift-ru-apk` artifact.
 
-1. Open your phone's **Settings**
-2. Find **Accessibility**
-3. Open the list of accessibility services and enable **Drift Preview**
+The workflow installs JDK 17, Android SDK 36, NDK r28 and Rust with the
+`aarch64-linux-android` target, then runs `./gradlew assembleDebug`.
 
-The exact menu names may vary depending on your device
+### Locally (Linux x86_64)
 
-**Note:** Drift Preview is only required for thumbnails. Enable it if you want to use the thumbnail feature; it is not required for the launcher itself
+```bash
+rustup target add aarch64-linux-android
+cargo install cargo-ndk --locked
+export ANDROID_HOME=$HOME/Android/Sdk
+export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358
+cd android
+./gradlew assembleDebug
+```
 
-## Download
+APK: `android/app/build/outputs/apk/debug/app-debug.apk`.
 
-Get the latest version from [GitHub Releases](../../releases/latest)
+If the Rust core is already built in `android/app/src/main/jniLibs/arm64-v8a/`, skip cargo-ndk:
 
-## Device Testing
+```bash
+./gradlew assembleDebug -PskipRust
+```
 
-DriftWM for Android has been tested on multiple real Android devices. Compatibility and functionality may still vary depending on the Android version and device
+## Updating from upstream
 
-## Security Notice
+```bash
+./sync-upstream.sh   # fetch + merge upstream/main, lists conflicts if any
+git push
+```
 
-Drift is intended to be safe to use. However, your device's built-in security scanner or antivirus may occasionally display a warning during installation. This may be a false positive
+Or on GitHub: **Sync fork → Update branch**. Actions rebuilds the APK automatically.
 
-Only install the APK downloaded from this project's official [GitHub Releases](../../releases/latest) page. If a security warning appears, verify that the APK came from the official release before deciding how to proceed
+Conflicts are usually limited to the files where the translation is wired in:
+`L.java`, `SettingsActivity`, `DrawerView`, `CanvasView`, `LauncherActivity`,
+`ColorPickerDialog`, `DiagnosticsActivity`.
 
-## Original Project
+## Project layout
 
-This project is based on [DriftWM](https://github.com/malbiruk/driftwm), created by its original developers
+```
+android/app/src/main/java/dev/drift/launcher/
+  L.java                 Russian string map + toast translation
+  SettingsActivity.java  Redesigned settings UI (themes, preview, shortcuts)
+  Appearance.java        Background, colours, palette derivation
+  ...
+android/app/src/main/res/values-ru/strings.xml   Localized accessibility strings
+.github/workflows/build-apk.yml                  CI APK build
+README-RU.md                                     Russian documentation
+sync-upstream.sh                                 Upstream merge helper
+```
 
-All credit for the original project goes to its respective authors
+## Signing
 
-## Disclaimer
+`android/app/drift-ru-debug.keystore` is a **debug** key, not a secret and not suitable for Google
+Play. Keep it: replacing it makes future APKs impossible to install over the current one.
+Alias `driftru`, store and key password `driftru`.
 
-This is an independent community fork and is not an official release of the original DriftWM project
+## Limitations
 
-Compatibility and functionality may vary depending on the Android version and device
+- The Rust core still emits some English toasts; the most common ones are translated in `L.toast`.
+- System Recents (the gesture/overview screen) belong to the firmware and are not replaced by Drift.
+- APKs are built for `arm64-v8a` only.
 
-## License
+## Credits
 
-Please refer to the [LICENSE](LICENSE) file for licensing terms
+- [DriftWM](https://github.com/malbiruk/driftwm) — the original project.
+- [DriftWM for Android](https://github.com/StepaandAlex69/DriftWM-for-Android) — the Android port this fork is based on.
+- Russian localization and settings redesign: this fork.
