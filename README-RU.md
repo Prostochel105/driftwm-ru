@@ -1,5 +1,9 @@
 # Drift Launcher — русская сборка
 
+[![build-apk](https://github.com/Prostochel105/driftwm-ru/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Prostochel105/driftwm-ru/actions/workflows/build-apk.yml)
+
+**[Скачать последний APK](https://github.com/Prostochel105/driftwm-ru/releases/latest)**
+
 Форк [DriftWM-for-Android](https://github.com/StepaandAlex69/DriftWM-for-Android) с русским интерфейсом.
 Основа — upstream V5. Лицензия — GPL-3.0, как у оригинала.
 
@@ -88,6 +92,8 @@ git push
 - Он не секретный и не годится для Google Play — это личная сборка.
 - **Не удаляйте и не пересоздавайте его**: иначе обновление поверх старой версии перестанет ставиться,
   и придётся удалять приложение вместе с раскладкой.
+- Ключ публичный, поэтому теоретически кто угодно может подписать APK с тем же именем пакета.
+  Ставьте обновления только из **Releases** этого репозитория.
 
 ## Сборка
 

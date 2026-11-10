@@ -1,5 +1,9 @@
 # DriftWM RU
 
+[![build-apk](https://github.com/Prostochel105/driftwm-ru/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Prostochel105/driftwm-ru/actions/workflows/build-apk.yml)
+
+**[Download the latest APK](https://github.com/Prostochel105/driftwm-ru/releases/latest)**
+
 Russian localization and a redesigned settings screen for
 [DriftWM for Android](https://github.com/StepaandAlex69/DriftWM-for-Android).
 
@@ -39,7 +43,7 @@ The upstream Drift is signed with a different key, so the first install requires
 
 1. Set your stock launcher as the home app: **Settings → Apps → Default apps → Home app**.
 2. Uninstall the original Drift. This deletes `workspace.json` (the card layout).
-3. Install the APK from this repository (allow installation from unknown sources).
+3. Install the [latest APK](https://github.com/Prostochel105/driftwm-ru/releases/latest) (allow installation from unknown sources).
 4. Set Drift as the home app again.
 5. Open **Drift settings → Quick actions** and enable previews and unrestricted battery.
 
@@ -106,6 +110,10 @@ sync-upstream.sh                                 Upstream merge helper
 `android/app/drift-ru-debug.keystore` is a **debug** key, not a secret and not suitable for Google
 Play. Keep it: replacing it makes future APKs impossible to install over the current one.
 Alias `driftru`, store and key password `driftru`.
+
+> **Security note.** Because the key is public, anyone can sign an APK for this package name.
+> Install updates only from this repository's **Releases** page, and treat APKs from other sources
+> as untrusted.
 
 ## Limitations
 

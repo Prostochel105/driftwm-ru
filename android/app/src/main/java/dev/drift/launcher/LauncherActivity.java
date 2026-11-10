@@ -1,5 +1,6 @@
 package dev.drift.launcher;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
@@ -180,6 +181,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         super.onDestroy();
     }
 
+    @SuppressLint("GestureBackNavigation") // API 33+ is handled by backCallback in onCreate.
     @SuppressWarnings("deprecation")
     @Override public void onBackPressed() {
         // Only reached below API 33 (or without the predictive-back callback).

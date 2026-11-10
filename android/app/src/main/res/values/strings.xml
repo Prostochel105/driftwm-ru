@@ -1,5 +1,7 @@
 <resources>
-    <string name="app_name">Drift</string>
+    <string name="app_name" translatable="false">Drift</string>
+    <string name="settings_label">Drift settings</string>
+    <string name="diagnostics_label">Drift diagnostics</string>
     <string name="thumb_service_label">Drift previews</string>
     <string name="thumb_service_desc">Saves a small picture of the app you are using so Drift can show it on its card. It cannot read screen text, passwords or notifications. Pictures never leave this phone.</string>
 </resources>

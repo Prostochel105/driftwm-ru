@@ -13,7 +13,10 @@ import java.util.Map;
 final class L {
     private L() {}
 
-    static final boolean RU = Locale.getDefault().getLanguage().equals("ru");
+    /** Read on every call so a system language change is picked up without a restart. */
+    static boolean isRu() {
+        return Locale.getDefault().getLanguage().equals("ru");
+    }
 
     private static final Map<String, String> M = new HashMap<>();
 
@@ -149,18 +152,18 @@ final class L {
 
     /** Translate one of the known English literals; unknown strings stay as they are. */
     static String t(String en) {
-        if (!RU || en == null) return en;
+        if (!isRu() || en == null) return en;
         String ru = M.get(en);
         return ru != null ? ru : en;
     }
 
     static String t(String en, String ru) {
-        return RU ? ru : en;
+        return isRu() ? ru : en;
     }
 
     /** Translate a toast that may come from Java or from the Rust core. */
     static String toast(String s) {
-        if (!RU || s == null) return s;
+        if (!isRu() || s == null) return s;
         String ru = M.get(s);
         if (ru != null) return ru;
         String tail = " is not installed. Select it and tap remove to clear the card";
@@ -175,6 +178,6 @@ final class L {
     static boolean settingsMatches(String query) {
         if (query == null || query.isEmpty()) return true;
         if ("drift settings".contains(query)) return true;
-        return RU && "настройки drift".contains(query);
+        return isRu() && "настройки drift".contains(query);
     }
 }

@@ -558,6 +558,8 @@ public final class SettingsActivity extends Activity {
     /** Miniature of the home screen: wallpaper, dots, two cards and the dock. */
     private final class Preview extends View {
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF frame = new RectF();
+        private final RectF card = new RectF();
 
         Preview(Context c) {
             super(c);
@@ -569,8 +571,9 @@ public final class SettingsActivity extends Activity {
             float r = dp(18);
             p.setStyle(Paint.Style.FILL);
 
+            frame.set(0, 0, w, h);
             p.setColor(a.bg);
-            c.drawRoundRect(new RectF(0, 0, w, h), r, r, p);
+            c.drawRoundRect(frame, r, r, p);
 
             p.setColor(a.dot);
             float gap = dp(24);
@@ -589,8 +592,9 @@ public final class SettingsActivity extends Activity {
             float dh = dp(42);
             float dx = (w - dw) / 2;
             float dy = h - dh - dp(14);
+            frame.set(dx, dy, dx + dw, dy + dh);
             p.setColor(pal.nav);
-            c.drawRoundRect(new RectF(dx, dy, dx + dw, dy + dh), dh / 2, dh / 2, p);
+            c.drawRoundRect(frame, dh / 2, dh / 2, p);
             float dotR = dp(6.5f);
             float step = (dw - dh) / 4f;
             for (int i = 0; i < 5; i++) {
@@ -600,8 +604,9 @@ public final class SettingsActivity extends Activity {
 
             p.setStyle(Paint.Style.STROKE);
             p.setStrokeWidth(dp(1));
+            frame.set(dp(.5f), dp(.5f), w - dp(.5f), h - dp(.5f));
             p.setColor(pal.stroke);
-            c.drawRoundRect(new RectF(dp(.5f), dp(.5f), w - dp(.5f), h - dp(.5f)), r, r, p);
+            c.drawRoundRect(frame, r, r, p);
             p.setStyle(Paint.Style.FILL);
         }
 
@@ -609,7 +614,8 @@ public final class SettingsActivity extends Activity {
             float l = cx - cw / 2;
             float t = cy - ch / 2;
             float rr = dp(12);
-            RectF rf = new RectF(l, t, l + cw, t + ch);
+            card.set(l, t, l + cw, t + ch);
+            RectF rf = card;
 
             p.setColor(pal.card);
             c.drawRoundRect(rf, rr, rr, p);
