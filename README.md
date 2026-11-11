@@ -1,6 +1,8 @@
 # DriftWM RU
 
 [![build-apk](https://github.com/Prostochel105/driftwm-ru/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Prostochel105/driftwm-ru/actions/workflows/build-apk.yml)
+[![release](https://img.shields.io/github/v/release/Prostochel105/driftwm-ru?label=release)](https://github.com/Prostochel105/driftwm-ru/releases/latest)
+[![downloads](https://img.shields.io/github/downloads/Prostochel105/driftwm-ru/total)](https://github.com/Prostochel105/driftwm-ru/releases)
 
 **[Download the latest APK](https://github.com/Prostochel105/driftwm-ru/releases/latest)**
 
@@ -27,6 +29,13 @@ Based on upstream **V5**. Licensed under **GPL-3.0**, same as the original.
   one. No uninstall, no lost cards.
 - **CI builds.** GitHub Actions builds the APK on every push and uploads it as an artifact.
 
+## How it works
+
+- **Java shell** — home activity, canvas rendering, drawer, settings and system integration.
+- **Rust core over JNI** — workspace model, gesture recognition, snapping, persistence and the display list.
+- **LauncherApps API** — launchable apps, icons and package events without `QUERY_ALL_PACKAGES`.
+- **Accessibility service** — optional app previews, stored only on the device.
+
 ## Settings screen
 
 | Section | What you can do |
@@ -38,6 +47,8 @@ Based on upstream **V5**. Licensed under **GPL-3.0**, same as the original.
 | **About** | Version, source link, license |
 
 ## Install
+
+**Requirements:** Android 11+ (API 30), arm64-v8a.
 
 The upstream Drift is signed with a different key, so the first install requires removing it.
 
@@ -114,6 +125,10 @@ Alias `driftru`, store and key password `driftru`.
 > **Security note.** Because the key is public, anyone can sign an APK for this package name.
 > Install updates only from this repository's **Releases** page, and treat APKs from other sources
 > as untrusted.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## Limitations
 

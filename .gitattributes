@@ -1,0 +1,11 @@
+* text=auto eol=lf
+
+# Keep GitHub's language bar meaningful for this mixed Java/Rust project.
+*.java linguist-language=Java
+*.rs linguist-language=Rust
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary

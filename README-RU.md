@@ -1,11 +1,15 @@
 # Drift Launcher — русская сборка
 
 [![build-apk](https://github.com/Prostochel105/driftwm-ru/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Prostochel105/driftwm-ru/actions/workflows/build-apk.yml)
+[![release](https://img.shields.io/github/v/release/Prostochel105/driftwm-ru?label=release)](https://github.com/Prostochel105/driftwm-ru/releases/latest)
+[![downloads](https://img.shields.io/github/downloads/Prostochel105/driftwm-ru/total)](https://github.com/Prostochel105/driftwm-ru/releases)
 
 **[Скачать последний APK](https://github.com/Prostochel105/driftwm-ru/releases/latest)**
 
 Форк [DriftWM-for-Android](https://github.com/StepaandAlex69/DriftWM-for-Android) с русским интерфейсом.
 Основа — upstream V5. Лицензия — GPL-3.0, как у оригинала.
+
+> English version: [README.md](README.md)
 
 ## Что переведено
 
@@ -17,6 +21,13 @@
 
 Язык выбирается по системному: если система русская — интерфейс русский, иначе английский.
 Тосты, которые генерирует Rust-ядро, переведены частично (самые частые); остальные остаются английскими.
+
+## Как это устроено
+
+- **Java-оболочка** — домашняя активити, отрисовка холста, список приложений, настройки и системная интеграция.
+- **Rust-ядро через JNI** — модель рабочего стола, жесты, привязки, сохранение и display list.
+- **LauncherApps API** — список запускаемых приложений, иконки и события пакетов без `QUERY_ALL_PACKAGES`.
+- **Служба специальных возможностей** — необязательные превью приложений, которые хранятся только на телефоне.
 
 ## Экран настроек
 
@@ -34,6 +45,8 @@
 превью и снято ли ограничение батареи.
 
 ## Установка (первый раз)
+
+**Требования:** Android 11+ (API 30), arm64-v8a.
 
 Оригинальный Drift подписан другим ключом, поэтому поверх него этот APK **не встанет**.
 
@@ -137,6 +150,10 @@ APK: `android/app/build/outputs/apk/debug/app-debug.apk`.
 - `res/values-ru/strings.xml` — локализация службы превью.
 - `android/app/build.gradle` — фиксированный ключ подписи и флаг `-PskipRust`.
 - `.github/workflows/build-apk.yml` — сборка APK в CI.
+
+## Журнал изменений
+
+См. [CHANGELOG.md](CHANGELOG.md).
 
 ## Ограничения
 
