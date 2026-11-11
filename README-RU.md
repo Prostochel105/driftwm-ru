@@ -1,5 +1,7 @@
 # Drift Launcher — русская сборка
 
+![DriftWM RU — русский лаунчер для Android](docs/social-preview.png)
+
 [![build-apk](https://github.com/Prostochel105/driftwm-ru/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Prostochel105/driftwm-ru/actions/workflows/build-apk.yml)
 [![release](https://img.shields.io/github/v/release/Prostochel105/driftwm-ru?label=release)](https://github.com/Prostochel105/driftwm-ru/releases/latest)
 [![downloads](https://img.shields.io/github/downloads/Prostochel105/driftwm-ru/total)](https://github.com/Prostochel105/driftwm-ru/releases)
@@ -21,6 +23,16 @@
 
 Язык выбирается по системному: если система русская — интерфейс русский, иначе английский.
 Тосты, которые генерирует Rust-ядро, переведены частично (самые частые); остальные остаются английскими.
+
+## Скриншоты
+
+realme 11 4G, V5.3.
+
+| Рабочий стол | Настройки | Жесты |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/home.png" width="240"> | <img src="docs/screenshots/settings.png" width="240"> | <img src="docs/screenshots/gestures.png" width="240"> |
+| **Быстрые действия** | **Список приложений** | |
+| <img src="docs/screenshots/quick-actions.png" width="240"> | <img src="docs/screenshots/drawer.png" width="240"> | |
 
 ## Как это устроено
 

@@ -1,5 +1,7 @@
 # DriftWM RU
 
+![DriftWM RU — русский лаунчер для Android](docs/social-preview.png)
+
 [![build-apk](https://github.com/Prostochel105/driftwm-ru/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Prostochel105/driftwm-ru/actions/workflows/build-apk.yml)
 [![release](https://img.shields.io/github/v/release/Prostochel105/driftwm-ru?label=release)](https://github.com/Prostochel105/driftwm-ru/releases/latest)
 [![downloads](https://img.shields.io/github/downloads/Prostochel105/driftwm-ru/total)](https://github.com/Prostochel105/driftwm-ru/releases)
@@ -28,6 +30,16 @@ Based on upstream **V5**. Licensed under **GPL-3.0**, same as the original.
   (`android/app/drift-ru-debug.keystore`), so every APK built here installs **over** the previous
   one. No uninstall, no lost cards.
 - **CI builds.** GitHub Actions builds the APK on every push and uploads it as an artifact.
+
+## Screenshots
+
+Realme 11 4G, V5.3.
+
+| Home | Settings | Gestures |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/home.png" width="240"> | <img src="docs/screenshots/settings.png" width="240"> | <img src="docs/screenshots/gestures.png" width="240"> |
+| **Quick actions** | **App list** | |
+| <img src="docs/screenshots/quick-actions.png" width="240"> | <img src="docs/screenshots/drawer.png" width="240"> | |
 
 ## How it works
 
