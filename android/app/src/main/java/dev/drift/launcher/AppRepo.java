@@ -143,6 +143,11 @@ final class AppRepo {
         return entries.get(key);
     }
 
+    /** Whether the app is currently in the launchable-app list. */
+    boolean has(String key) {
+        return entries.containsKey(key);
+    }
+
     String label(String key) {
         Entry e = entries.get(key);
         return e == null ? key : e.label;

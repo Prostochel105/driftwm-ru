@@ -44,6 +44,12 @@ final class IconCache {
     Bitmap get(String key) {
         if (key == null) return null;
         Bitmap b = cache.get(key);
+        // An icon can fail while the app list is still loading, or while a package
+        // is being updated. Once the app is back in the list, retry instead of
+        // keeping a black placeholder forever.
+        if (b == null && failed.contains(key) && repo.has(key)) {
+            failed.remove(key);
+        }
         if (b == null && !failed.contains(key) && pending.add(key)) {
             worker.execute(() -> {
                 Bitmap loaded = repo.renderIcon(key, sizePx);
@@ -52,6 +58,8 @@ final class IconCache {
                     if (loaded != null) {
                         cache.put(key, loaded);
                     } else {
+                        // Do not retry every frame for genuinely missing apps;
+                        // get() clears this once the key appears in the app list.
                         failed.add(key);
                     }
                     queueNotify();
@@ -59,6 +67,11 @@ final class IconCache {
             });
         }
         return b;
+    }
+
+    /** Retry icons of installed apps that failed earlier (app list changed or resumed). */
+    void retry() {
+        failed.removeIf(repo::has);
     }
 
     /** Forget everything (an app was updated and its icon may differ). */

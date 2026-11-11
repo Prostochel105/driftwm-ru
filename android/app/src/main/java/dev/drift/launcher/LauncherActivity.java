@@ -110,6 +110,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
             drawer.iconsLoaded();
         });
         repo.setListener(() -> {
+            icons.retry();
             drawer.refresh();
             canvas.invalidate();
         });
@@ -147,6 +148,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         if (!ready) return;
         Native.resetClock();
         refreshAppearance(); // may have changed in Drift settings
+        icons.retry();
         repo.scheduleRefresh();
         canvas.invalidate();
     }
