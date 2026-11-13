@@ -20,7 +20,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Launchable apps via the public LauncherApps API: no QUERY_ALL_PACKAGES, works
@@ -54,8 +53,9 @@ final class AppRepo {
     private final LauncherApps launcherApps;
     private final UserManager userManager;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final ExecutorService worker = Workers.single("drift-app-list");
     private volatile Map<String, Entry> entries = new HashMap<>();
+    private volatile boolean loaded;
     private Listener listener;
     private boolean refreshQueued;
     private long lastRefreshRequest;
@@ -81,11 +81,16 @@ final class AppRepo {
 
     void start() {
         launcherApps.registerCallback(callback, main);
-        scheduleRefresh();
+        scheduleRefresh(0);
     }
 
     void stop() {
         launcherApps.unregisterCallback(callback);
+    }
+
+    /** True once the first complete app-list query has been published. */
+    boolean isLoaded() {
+        return loaded;
     }
 
     /**
@@ -100,10 +105,14 @@ final class AppRepo {
 
     /** Coalesces bursts (installing an app fires several callbacks). */
     void scheduleRefresh() {
+        scheduleRefresh(150);
+    }
+
+    private void scheduleRefresh(long delayMs) {
         if (refreshQueued) return;
         refreshQueued = true;
         lastRefreshRequest = SystemClock.uptimeMillis();
-        main.postDelayed(refreshTask, 150);
+        main.postDelayed(refreshTask, delayMs);
     }
 
     private void refreshNow() {
@@ -145,9 +154,15 @@ final class AppRepo {
             }
             main.post(() -> {
                 ThumbStore.setKnownPackages(pkgs);
-                if (sameApps(entries, map)) return;
-                entries = map;
-                Native.setApps(k, l);
+                if (!sameApps(entries, map)) {
+                    entries = map;
+                    Native.setApps(k, l);
+                }
+                loaded = true;
+                Perf.mark("apps loaded (" + map.size() + ")");
+                // Notify even when the list is unchanged: the first query may
+                // complete after the cards were already drawn, and their icon
+                // requests were deliberately skipped until now.
                 if (listener != null) listener.onAppsChanged();
             });
         });

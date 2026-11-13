@@ -183,6 +183,9 @@ public final class DiagnosticsActivity extends Activity {
         kv(sb, "Drift previews service enabled", ThumbService.isEnabled(this));
         kv(sb, "enabled services", Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES));
 
+        section(sb, "Performance");
+        sb.append(Perf.report());
+
         section(sb, "Reading this report");
         sb.append(verdict(ours, defPkg, recentsPkg, quickstepInRecentsPkg, !qs.isEmpty()));
         sb.append("\nDrift itself does not hide system bars, exclude gestures, touch the task stack or call\n");

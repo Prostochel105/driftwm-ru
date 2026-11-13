@@ -14,7 +14,6 @@ import android.view.Display;
 import android.view.accessibility.AccessibilityEvent;
 
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Captures a still preview of the app in front, for the cards on the canvas.
@@ -33,7 +32,7 @@ public final class ThumbService extends AccessibilityService {
     private static final long MIN_INTERVAL_MS = 1300;
 
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final ExecutorService io = Workers.single("drift-preview-io");
     private final Runnable shoot = this::capture;
     private volatile String front;
     private long lastShot;

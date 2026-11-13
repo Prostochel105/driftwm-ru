@@ -197,8 +197,11 @@ final class CanvasView extends View {
     // ---- drawing ---------------------------------------------------------------
 
     @Override protected void onDraw(Canvas c) {
+        Perf.firstDraw();
         boolean more = Native.tick(SystemClock.uptimeMillis());
+        long renderStart = System.nanoTime();
         int n = Native.render(list);
+        Perf.frame(System.nanoTime() - renderStart);
         if (n > list.length) {
             list = new float[n + 2048];
             n = Native.render(list);

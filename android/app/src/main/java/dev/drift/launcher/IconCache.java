@@ -8,7 +8,6 @@ import android.util.LruCache;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /** Icons are decoded off the main thread; until one arrives callers draw a placeholder. */
 final class IconCache {
@@ -19,7 +18,7 @@ final class IconCache {
     private final AppRepo repo;
     private final int sizePx;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final ExecutorService worker = Workers.fixed("drift-icons", 2);
     private final Set<String> pending = new HashSet<>();
     private final Set<String> failed = new HashSet<>();
     private boolean notifyQueued;
@@ -44,6 +43,9 @@ final class IconCache {
     Bitmap get(String key) {
         if (key == null) return null;
         Bitmap b = cache.get(key);
+        // On a cold start the cards are drawn before the app list is ready.
+        // Asking for icons then can only fail, so wait for the first list.
+        if (b == null && !repo.isLoaded()) return null;
         // An icon can fail while the app list is still loading, or while a package
         // is being updated. Once the app is back in the list, retry instead of
         // keeping a black placeholder forever.

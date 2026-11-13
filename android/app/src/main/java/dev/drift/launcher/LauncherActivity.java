@@ -42,6 +42,8 @@ import java.util.List;
  */
 public final class LauncherActivity extends Activity implements CanvasView.Host, DrawerView.Callback {
     private static final long SAVE_DEBOUNCE_MS = 400;
+    /** Do not offer the way back after a single empty frame; wait 1.5 s. */
+    private static final long HOME_PILL_DELAY_MS = 1500;
 
     private AppRepo repo;
     private IconCache icons;
@@ -71,6 +73,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        Perf.created();
         installCrashRecorder();
         String previous = readCrash();
         if (previous != null) {
@@ -79,6 +82,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         }
         try {
             setUp();
+            Perf.mark("onCreate done");
             ready = true;
             offerPreviews();
         } catch (Throwable t) {
@@ -94,14 +98,16 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         w.setNavigationBarContrastEnforced(false);
 
         File stateFile = new File(getFilesDir(), "workspace.json");
+        Perf.mark("Native.init start");
         int loaded = Native.init(stateFile.getAbsolutePath());
+        Perf.mark("Native.init done (" + loaded + ")");
         if (loaded == 2) {
             toast("Workspace restored from backup");
         } else if (loaded == 3) {
             toast("Saved workspace was unreadable; started empty (old file kept)");
         }
 
-        saveThread = new HandlerThread("drift-save");
+        saveThread = new HandlerThread("drift-save", android.os.Process.THREAD_PRIORITY_BACKGROUND);
         saveThread.start();
         saveHandler = new Handler(saveThread.getLooper());
 
@@ -124,6 +130,10 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
             drawer.refresh();
             canvas.invalidate();
         });
+        // Start the first app-list query before the view hierarchy is attached:
+        // it runs on a background thread and lets card icons arrive sooner after
+        // a cold start.
+        repo.start();
 
         root = new FrameLayout(this);
         root.addView(canvas, new FrameLayout.LayoutParams(
@@ -169,6 +179,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
             return WindowInsets.CONSUMED;
         });
         setContentView(root);
+        Perf.mark("setContentView");
         refreshAppearance();
 
         if (Build.VERSION.SDK_INT >= 33) {
@@ -176,24 +187,28 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                 OnBackInvokedDispatcher.PRIORITY_DEFAULT, backCallback);
         }
-        repo.start();
     }
 
     @Override protected void onResume() {
         super.onResume();
         if (!ready) return;
+        Perf.resumed();
         Native.resetClock();
         refreshAppearance(); // may have changed in Drift settings
         icons.retry();
         repo.refreshIfStale();
         canvas.invalidate();
+        Perf.mark("onResume done");
     }
 
     @Override protected void onPause() {
-        // The process can be killed while another app is in front: persist now.
+        // The process can be killed while another app is in front: persist now,
+        // but never fsync on the main thread — that made leaving the launcher
+        // feel like a freeze on slower storage.
         if (ready) {
+            Perf.paused();
             saveHandler.removeCallbacks(saveTask);
-            Native.save();
+            saveHandler.post(saveTask);
         }
         super.onPause();
     }
@@ -275,7 +290,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         // A quick pan or zoom can leave the screen empty for a frame or two;
         // wait before offering the way back so the pill does not flicker.
         uiHandler.removeCallbacks(updateHomePill);
-        uiHandler.postDelayed(updateHomePill, 300);
+        uiHandler.postDelayed(updateHomePill, HOME_PILL_DELAY_MS);
     }
 
     private void updateHomePill() {
@@ -453,7 +468,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         updateBars();
         canvas.invalidate();
         uiHandler.removeCallbacks(updateHomePill);
-        uiHandler.postDelayed(updateHomePill, 150);
+        uiHandler.postDelayed(updateHomePill, HOME_PILL_DELAY_MS);
     }
 
     @Override public void onSettings() {

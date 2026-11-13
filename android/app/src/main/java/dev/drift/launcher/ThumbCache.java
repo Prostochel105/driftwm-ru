@@ -11,7 +11,6 @@ import java.io.File;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /** Decodes preview JPEGs off the main thread (RGB_565 to halve memory). Main-thread API. */
 final class ThumbCache implements ThumbStore.Listener {
@@ -21,9 +20,10 @@ final class ThumbCache implements ThumbStore.Listener {
 
     private final Context ctx;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final ExecutorService worker = Workers.fixed("drift-thumbs", 2);
     private final Set<String> pending = new HashSet<>();
     private final Set<String> missing = new HashSet<>();
+    private boolean notifyQueued;
     private Listener listener;
 
     private final LruCache<String, Bitmap> cache = new LruCache<>(20 * 1024 * 1024) {
@@ -61,7 +61,7 @@ final class ThumbCache implements ThumbStore.Listener {
                     } else {
                         missing.add(pkg);
                     }
-                    if (listener != null) listener.onThumbsChanged();
+                    queueNotify();
                 });
             });
         }
@@ -71,6 +71,16 @@ final class ThumbCache implements ThumbStore.Listener {
     @Override public void onThumbUpdated(String pkg) {
         cache.remove(pkg);
         missing.remove(pkg);
-        if (listener != null) listener.onThumbsChanged();
+        queueNotify();
+    }
+
+    /** One redraw per main-loop turn, not one per decoded preview. */
+    private void queueNotify() {
+        if (notifyQueued) return;
+        notifyQueued = true;
+        main.post(() -> {
+            notifyQueued = false;
+            if (listener != null) listener.onThumbsChanged();
+        });
     }
 }
