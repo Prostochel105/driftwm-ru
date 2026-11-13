@@ -45,6 +45,9 @@ final class Native {
 
     static native void onHome();
 
+    /** Fit every card on screen after the camera was panned into empty space. */
+    static native void returnHome();
+
     /** True when something was dismissed (a card selection). */
     static native boolean onBack();
 

@@ -5,17 +5,20 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Insets;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
+import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
-import android.graphics.Typeface;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -46,7 +49,14 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
     private CanvasView canvas;
     private DrawerView drawer;
     private FrameLayout root;
+    private TextView homePill;
     private Toast toast;
+
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private final Runnable updateHomePill = this::updateHomePill;
+    private boolean homePillWanted;
+    private int visibleCards = -1;
+    private int totalCards = -1;
 
     private HandlerThread saveThread;
     private Handler saveHandler;
@@ -120,6 +130,29 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         root.addView(drawer, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        homePill = new TextView(this);
+        homePill.setTextSize(14);
+        homePill.setTypeface(Typeface.DEFAULT_BOLD);
+        homePill.setGravity(Gravity.CENTER);
+        homePill.setPadding(dp(18), dp(10), dp(18), dp(10));
+        homePill.setClickable(true);
+        homePill.setFocusable(true);
+        homePill.setElevation(dp(8));
+        homePill.setText(L.t("Back home", "Вернуться домой"));
+        homePill.setContentDescription(L.t("Back home", "Вернуться домой"));
+        homePill.setVisibility(View.GONE);
+        homePill.setOnClickListener(v -> {
+            hideHomePill();
+            Native.returnHome();
+            canvas.invalidate();
+        });
+        FrameLayout.LayoutParams pillLp = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        pillLp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        pillLp.bottomMargin = dp(96);
+        root.addView(homePill, pillLp);
+
         root.setOnApplyWindowInsetsListener((v, wi) -> {
             int bars = WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout();
             Insets sb = wi.getInsets(bars);
@@ -130,6 +163,9 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
             ThumbStore.cropBottom = sb.bottom;
             canvas.setInsets(Math.max(sb.left, sg.left), sb.top, Math.max(sb.right, sg.right), sb.bottom);
             drawer.setInsets(sb.left, sb.top, sb.right, Math.max(sb.bottom, ime.bottom));
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) homePill.getLayoutParams();
+            lp.bottomMargin = sb.bottom + dp(92);
+            homePill.setLayoutParams(lp);
             return WindowInsets.CONSUMED;
         });
         setContentView(root);
@@ -149,7 +185,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         Native.resetClock();
         refreshAppearance(); // may have changed in Drift settings
         icons.retry();
-        repo.scheduleRefresh();
+        repo.refreshIfStale();
         canvas.invalidate();
     }
 
@@ -174,6 +210,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
     }
 
     @Override protected void onDestroy() {
+        uiHandler.removeCallbacks(updateHomePill);
         if (repo != null) repo.stop();
         if (Build.VERSION.SDK_INT >= 33 && backCallback != null) {
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backCallback);
@@ -232,6 +269,43 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         }
     }
 
+    @Override public void onCardsVisibilityChanged(int visible, int total) {
+        visibleCards = visible;
+        totalCards = total;
+        // A quick pan or zoom can leave the screen empty for a frame or two;
+        // wait before offering the way back so the pill does not flicker.
+        uiHandler.removeCallbacks(updateHomePill);
+        uiHandler.postDelayed(updateHomePill, 300);
+    }
+
+    private void updateHomePill() {
+        if (!ready || homePill == null) return;
+        boolean show = totalCards > 0 && visibleCards == 0
+            && drawer != null && !drawer.isShowing();
+        if (show == homePillWanted) return;
+        homePillWanted = show;
+        homePill.animate().cancel();
+        if (show) {
+            homePill.setVisibility(View.VISIBLE);
+            homePill.setAlpha(0f);
+            homePill.setTranslationY(dp(8));
+            homePill.animate().alpha(1f).translationY(0f).setDuration(140).start();
+        } else {
+            homePill.animate().alpha(0f).translationY(dp(8)).setDuration(100)
+                .withEndAction(() -> {
+                    if (!homePillWanted) homePill.setVisibility(View.GONE);
+                }).start();
+        }
+    }
+
+    private void hideHomePill() {
+        if (homePill == null) return;
+        homePillWanted = false;
+        uiHandler.removeCallbacks(updateHomePill);
+        homePill.animate().cancel();
+        homePill.setVisibility(View.GONE);
+    }
+
     private void launch(String key) {
         if (drawer.isShowing()) {
             drawer.hide();
@@ -265,7 +339,18 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         appearance = a;
         canvas.setAppearance(a);
         drawer.setAppearance(a);
+        styleHomePill();
         updateBars();
+    }
+
+    private void styleHomePill() {
+        if (homePill == null) return;
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(appearance.pal.pill);
+        bg.setCornerRadius(dp(22));
+        bg.setStroke(dp(1), appearance.pal.stroke);
+        homePill.setBackground(bg);
+        homePill.setTextColor(appearance.pal.text);
     }
 
     /**
@@ -293,6 +378,10 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         } catch (RuntimeException ignored) {
             // cosmetic only
         }
+    }
+
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
     }
 
     private static String tr(String en, String ru) {
@@ -330,6 +419,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
     }
 
     private void showDrawer(int slot) {
+        hideHomePill();
         drawer.show(slot);
         updateBars();
     }
@@ -362,6 +452,8 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         Native.drawerClosed();
         updateBars();
         canvas.invalidate();
+        uiHandler.removeCallbacks(updateHomePill);
+        uiHandler.postDelayed(updateHomePill, 150);
     }
 
     @Override public void onSettings() {

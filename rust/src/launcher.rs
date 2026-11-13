@@ -387,6 +387,19 @@ impl Launcher {
         self.home_return = None;
     }
 
+    /// Fit every card on screen and forget any "back" camera. This is what the
+    /// "return home" banner calls when the camera has been panned into empty space.
+    pub fn return_home(&mut self) {
+        let Some(bbox) = bounding_box(self.cards.iter().map(|c| &c.rect)) else {
+            self.toast("Nothing on the canvas yet");
+            return;
+        };
+        let zoom = zoom_to_fit(&bbox, self.viewport, self.cfg.fit_padding, 1.0);
+        self.overview_return = None;
+        self.home_return = None;
+        self.animate_to(bbox.center(), zoom);
+    }
+
     /// Double tap on empty canvas: jump to the origin view, and back.
     pub fn toggle_home(&mut self) {
         if let Some(back) = self.home_return.take() {
@@ -852,6 +865,25 @@ mod tests {
         }
         assert!((l.camera.zoom - before.zoom).abs() < 1e-3);
         assert!(l.camera.pos.dist(before.pos) < 0.5);
+    }
+
+    #[test]
+    fn return_home_fits_every_card() {
+        let mut l = launcher();
+        for k in ["a", "b", "c"] {
+            l.launch_app(k, LaunchSource::Drawer);
+        }
+        l.cards[0].rect.x -= 3000.0;
+        l.geometry_changed();
+        l.camera.pos = Vec2::new(1.0e6, -1.0e6);
+        l.return_home();
+        for t in (0..200).map(|i| i * 16) {
+            l.tick(t);
+        }
+        let view = l.view_rect();
+        for c in &l.cards {
+            assert!(visible_fraction(&c.rect, &view) > 0.99, "return home must show every card");
+        }
     }
 
     #[test]

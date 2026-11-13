@@ -30,6 +30,9 @@ final class CanvasView extends View {
     interface Host {
         /** Main thread; events emitted by the core (launch, drawer, ...). */
         void onCoreEvents(List<String> events);
+
+        /** Main thread; the number of on-screen cards changed. */
+        void onCardsVisibilityChanged(int visible, int total);
     }
 
     private static final int HEADER = 21;
@@ -69,6 +72,8 @@ final class CanvasView extends View {
     private float[] list = new float[4096];
     private float[] dots = new float[2048];
     private int tableVersion = Integer.MIN_VALUE;
+    private int lastVisibleCards = -1;
+    private int lastTotalCards = -1;
     private final ArrayList<String> keys = new ArrayList<>();
     private final ArrayList<String> labels = new ArrayList<>();
     private final ArrayList<Boolean> available = new ArrayList<>();
@@ -216,6 +221,7 @@ final class CanvasView extends View {
         int nCards = (int) list[6];
         int nLinks = (int) list[7];
         int nUi = (int) list[8];
+        notifyCardVisibility(nCards);
         int linkBase = HEADER + nCards * CARD_STRIDE;
         int uiBase = linkBase + nLinks * LINK_STRIDE;
         drawLinks(c, linkBase, nLinks);
@@ -242,6 +248,15 @@ final class CanvasView extends View {
         pendingEvents.clear();
         host.onCoreEvents(batch);
         invalidate();
+    }
+
+    /** Only fires when the numbers change; the host decides whether to show the banner. */
+    private void notifyCardVisibility(int visible) {
+        int total = keys.size();
+        if (visible == lastVisibleCards && total == lastTotalCards) return;
+        lastVisibleCards = visible;
+        lastTotalCards = total;
+        if (host != null) host.onCardsVisibilityChanged(visible, total);
     }
 
     private void refreshTable() {

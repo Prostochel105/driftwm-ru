@@ -203,12 +203,12 @@ pub extern "system" fn Java_dev_drift_launcher_Native_render(
     let cap = env.get_array_length(&dst).unwrap_or(0).max(0) as usize;
     let mut local = vec![0f32; 0];
     let n = with(0usize, |b| {
-        // Render into the bridge scratch first; copy out only when it fits.
-        let mut probe = [0f32; 0];
-        let len = b.render_into(&mut probe);
+        // Render once per frame. The old probe render did the whole display-list
+        // pass twice, which showed up as jank on slower phones.
+        b.launcher.render(&mut b.scratch);
+        let len = b.scratch.len();
         if len <= cap {
-            local.resize(len, 0.0);
-            b.render_into(&mut local);
+            local.extend_from_slice(&b.scratch);
         }
         len
     });
@@ -315,6 +315,11 @@ pub extern "system" fn Java_dev_drift_launcher_Native_dockReplace(
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_drift_launcher_Native_onHome(_env: JNIEnv, _c: JClass) {
     with((), |b| b.launcher.on_home());
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_drift_launcher_Native_returnHome(_env: JNIEnv, _c: JClass) {
+    with((), |b| b.launcher.return_home());
 }
 
 /// Back pressed: true when something (a selection) was dismissed.

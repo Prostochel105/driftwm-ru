@@ -11,6 +11,7 @@ import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
+import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
 
@@ -57,6 +58,7 @@ final class AppRepo {
     private volatile Map<String, Entry> entries = new HashMap<>();
     private Listener listener;
     private boolean refreshQueued;
+    private long lastRefreshRequest;
     private final Runnable refreshTask = this::refreshNow;
 
     private final LauncherApps.Callback callback = new LauncherApps.Callback() {
@@ -86,10 +88,21 @@ final class AppRepo {
         launcherApps.unregisterCallback(callback);
     }
 
+    /**
+     * Returning from another app does not change the installed-app list, and the
+     * package callbacks below already cover real changes. Re-querying everything
+     * on every resume made the home screen feel slow, so do it at most once a minute.
+     */
+    void refreshIfStale() {
+        if (SystemClock.uptimeMillis() - lastRefreshRequest < 60_000L) return;
+        scheduleRefresh();
+    }
+
     /** Coalesces bursts (installing an app fires several callbacks). */
     void scheduleRefresh() {
         if (refreshQueued) return;
         refreshQueued = true;
+        lastRefreshRequest = SystemClock.uptimeMillis();
         main.postDelayed(refreshTask, 150);
     }
 
@@ -131,12 +144,22 @@ final class AppRepo {
                 if (!en.component.getPackageName().equals(ctx.getPackageName())) pkgs.add(en.component.getPackageName());
             }
             main.post(() -> {
-                entries = map;
                 ThumbStore.setKnownPackages(pkgs);
+                if (sameApps(entries, map)) return;
+                entries = map;
                 Native.setApps(k, l);
                 if (listener != null) listener.onAppsChanged();
             });
         });
+    }
+
+    private static boolean sameApps(Map<String, Entry> a, Map<String, Entry> b) {
+        if (a.size() != b.size()) return false;
+        for (Map.Entry<String, Entry> e : b.entrySet()) {
+            Entry old = a.get(e.getKey());
+            if (old == null || !old.label.equals(e.getValue().label)) return false;
+        }
+        return true;
     }
 
     Entry get(String key) {
