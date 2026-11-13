@@ -56,6 +56,7 @@ final class AppRepo {
     private final ExecutorService worker = Workers.single("drift-app-list");
     private volatile Map<String, Entry> entries = new HashMap<>();
     private volatile boolean loaded;
+    private final Map<String, Long> iconVersions = new java.util.concurrent.ConcurrentHashMap<>();
     private Listener listener;
     private boolean refreshQueued;
     private long lastRefreshRequest;
@@ -159,6 +160,7 @@ final class AppRepo {
                     Native.setApps(k, l);
                 }
                 loaded = true;
+                iconVersions.clear();
                 Perf.mark("apps loaded (" + map.size() + ")");
                 // Notify even when the list is unchanged: the first query may
                 // complete after the cards were already drawn, and their icon
@@ -202,6 +204,24 @@ final class AppRepo {
         } catch (SecurityException | ActivityNotFoundException | IllegalStateException ex) {
             return false;
         }
+    }
+
+    /** Changing value that invalidates a cached icon (app update time), 0 if unknown. */
+    long iconVersion(String key) {
+        Entry e = entries.get(key);
+        if (e == null) return 0L;
+        String pkg = e.component.getPackageName();
+        Long known = iconVersions.get(pkg);
+        if (known != null) return known;
+        long version = 0L;
+        try {
+            android.content.pm.PackageInfo pi = ctx.getPackageManager().getPackageInfo(pkg, 0);
+            version = pi.lastUpdateTime;
+        } catch (Exception ex) {
+            version = 0L;
+        }
+        iconVersions.put(pkg, version);
+        return version;
     }
 
     /** Renders the app icon; call off the main thread. */

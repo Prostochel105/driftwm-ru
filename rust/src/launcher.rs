@@ -85,6 +85,8 @@ pub struct Launcher {
     pub(crate) anim: Option<CameraAnimation>,
     pub(crate) overview_return: Option<Camera>,
     pub(crate) home_return: Option<Camera>,
+    /// Camera saved just before launching an app; restored when the user comes back.
+    pub(crate) return_camera: Option<Camera>,
     pub(crate) cycle_idx: usize,
     pub(crate) cycle_ms: u64,
     pub(crate) g: GestureState,
@@ -128,6 +130,7 @@ impl Launcher {
             anim: None,
             overview_return: None,
             home_return: None,
+            return_camera: None,
             cycle_idx: 0,
             cycle_ms: 0,
             g: GestureState::default(),
@@ -149,6 +152,12 @@ impl Launcher {
             pos: Vec2::new(saved.camera.x, saved.camera.y),
             zoom: saved.camera.zoom,
         };
+        // Killed while an app was in front: the first resume snaps the camera
+        // back to the view the user had before launching it.
+        l.return_camera = saved.return_camera.map(|c| Camera {
+            pos: Vec2::new(c.x, c.y),
+            zoom: c.zoom,
+        });
         for c in saved.cards {
             let id = l.alloc_id();
             l.cards.push(Card {
@@ -201,6 +210,11 @@ impl Launcher {
             .filter_map(|id| self.card(*id).map(|c| c.key.clone()))
             .collect();
         s.selected = self.selected.and_then(|id| self.card(id).map(|c| c.key.clone()));
+        s.return_camera = self.return_camera.map(|c| CameraRecord {
+            x: c.pos.x,
+            y: c.pos.y,
+            zoom: c.zoom,
+        });
         s.config = self.cfg.clone();
         s
     }
@@ -575,6 +589,7 @@ impl Launcher {
                 self.center_card(id);
             } else {
                 self.touch_history(id);
+                self.return_camera = Some(self.camera);
                 self.reveal_card(id);
                 self.emit(Event::Launch(key.to_owned()));
             }
@@ -608,6 +623,7 @@ impl Launcher {
         self.bump_layout();
         self.select(Some(id));
         self.touch_history(id);
+        self.return_camera = Some(self.camera);
         self.reveal_card(id);
         self.emit(Event::Launch(key.to_owned()));
         self.emit(Event::Save);
@@ -651,6 +667,22 @@ impl Launcher {
     /// Back/Home pressed while already on the launcher.
     pub fn on_home(&mut self) {
         self.select(None);
+        self.restore_return_camera();
+    }
+
+    /// If an app was launched from here, snap the camera back to the exact view
+    /// the user had before opening it. Called on resume and on Home.
+    pub fn restore_return_camera(&mut self) {
+        let Some(cam) = self.return_camera.take() else { return };
+        self.anim = None;
+        self.momentum.stop();
+        self.camera = cam;
+        self.emit(Event::Save);
+    }
+
+    /// The launch never happened (app gone): drop the pending return view.
+    pub fn cancel_return_camera(&mut self) {
+        self.return_camera = None;
     }
 
     /// Advance animations. Returns true while another frame is needed.
@@ -665,11 +697,16 @@ impl Launcher {
         self.tick_gestures(dt);
 
         let mut active = false;
+        let was_coasting = self.momentum.coasting;
         if let Some(delta) = self.momentum.tick(dt) {
             self.camera.pos = self.camera.pos + delta;
         }
         if self.momentum.coasting {
             active = true;
+        } else if was_coasting {
+            // A fling just settled: persist the final camera so a kill while an
+            // app is in front cannot roll the view back to before the fling.
+            self.emit(Event::Save);
         }
         if let Some(anim) = self.anim {
             let mut cam = self.camera;
@@ -988,6 +1025,67 @@ mod tests {
         assert!(l2.poll_event().is_none());
         l2.set_apps(apps(&["a"]));
         assert!(!l2.events.iter().any(|e| matches!(e, Event::Launch(_))));
+    }
+
+    #[test]
+    fn launch_remembers_view_and_restores_it() {
+        let mut l = launcher();
+        let before = Camera { pos: Vec2::new(1234.0, -567.0), zoom: 0.42 };
+        l.camera = before;
+        l.launch_app("a", LaunchSource::Drawer);
+        assert_eq!(l.return_camera, Some(before));
+        // The reveal animation would move the camera; returning must undo that.
+        l.camera = Camera { pos: Vec2::new(99999.0, 99999.0), zoom: 1.0 };
+        l.restore_return_camera();
+        assert_eq!(l.camera, before);
+        assert_eq!(l.return_camera, None);
+        assert!(drain(&mut l).iter().any(|e| matches!(e, Event::Save)));
+    }
+
+    #[test]
+    fn jump_to_existing_does_not_remember_a_view() {
+        let mut l = launcher();
+        l.launch_app("a", LaunchSource::Drawer);
+        drain(&mut l);
+        l.restore_return_camera(); // consume the marker from the real launch
+        l.camera.pos = Vec2::new(50000.0, 50000.0);
+        l.launch_app("a", LaunchSource::Drawer); // drawer_jumps_to_existing
+        assert!(l.return_camera.is_none());
+    }
+
+    #[test]
+    fn return_camera_survives_process_restart() {
+        let mut l = launcher();
+        let before = Camera { pos: Vec2::new(7.0, 8.0), zoom: 0.5 };
+        let after = Camera { pos: Vec2::new(-100.0, 250.0), zoom: 0.9 };
+        l.camera = before;
+        l.launch_app("a", LaunchSource::Drawer);
+        l.camera = after; // pretend the reveal animation settled
+        let mut l2 = Launcher::from_saved(l.to_saved());
+        assert_eq!(l2.camera, after);
+        assert_eq!(l2.return_camera, Some(before));
+        l2.restore_return_camera();
+        assert_eq!(l2.camera, before);
+        assert_eq!(l2.return_camera, None);
+    }
+
+    #[test]
+    fn fling_settle_persists_the_camera() {
+        let mut l = launcher();
+        l.momentum.velocity = Vec2::new(2000.0, 0.0);
+        l.momentum.coasting = true;
+        let mut t = 0u64;
+        let mut saves = 0;
+        for _ in 0..4000 {
+            t += 16;
+            l.tick(t);
+            saves += drain(&mut l).iter().filter(|e| matches!(e, Event::Save)).count();
+            if !l.momentum.coasting {
+                break;
+            }
+        }
+        assert!(!l.momentum.coasting, "fling should settle");
+        assert!(saves >= 1, "settling fling must persist the camera");
     }
 
     #[test]

@@ -113,7 +113,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
 
         float density = getResources().getDisplayMetrics().density;
         repo = new AppRepo(this);
-        icons = new IconCache(repo, density);
+        icons = new IconCache(repo, density, getCacheDir());
         thumbs = new ThumbCache(this);
         ThumbStore.setListener(thumbs);
         thumbs.setListener(() -> canvas.invalidate());
@@ -194,6 +194,8 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         if (!ready) return;
         Perf.resumed();
         Native.resetClock();
+        // Came back from an app: put the canvas exactly where the user left it.
+        Native.restoreReturnCamera();
         refreshAppearance(); // may have changed in Drift settings
         icons.retry();
         repo.refreshIfStale();
@@ -326,6 +328,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
             drawer.hide();
         }
         if (!repo.launch(key)) {
+            Native.cancelReturnCamera();
             toast(L.t("Can't open ", "Не удалось открыть ") + repo.label(key));
             repo.scheduleRefresh();
         }

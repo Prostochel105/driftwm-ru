@@ -58,6 +58,9 @@ pub struct SavedState {
     pub recents: Vec<String>,
     #[serde(default)]
     pub selected: Option<String>,
+    /// Camera to snap back to when the user returns from a launched app.
+    #[serde(default)]
+    pub return_camera: Option<CameraRecord>,
     #[serde(default)]
     pub config: Config,
     #[serde(flatten)]
@@ -78,6 +81,7 @@ impl SavedState {
             dock: Dock::new(),
             recents: Vec::new(),
             selected: None,
+            return_camera: None,
             config: Config::default(),
             extra: serde_json::Map::new(),
         }
@@ -141,6 +145,12 @@ pub fn sanitize(state: &mut SavedState) {
     });
     state.dock = std::mem::take(&mut state.dock).normalized();
     state.camera.zoom = state.camera.zoom.clamp(0.01, 10.0);
+    state.return_camera = state.return_camera.filter(|c| {
+        c.x.is_finite() && c.y.is_finite() && c.zoom.is_finite() && c.zoom > 0.0
+    });
+    if let Some(c) = &mut state.return_camera {
+        c.zoom = c.zoom.clamp(0.01, 10.0);
+    }
 }
 
 pub fn load(path: &Path) -> (SavedState, LoadSource) {

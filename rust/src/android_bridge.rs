@@ -317,6 +317,18 @@ pub extern "system" fn Java_dev_drift_launcher_Native_onHome(_env: JNIEnv, _c: J
     with((), |b| b.launcher.on_home());
 }
 
+/// Returning to the launcher: snap the camera back to the pre-launch view, if any.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_drift_launcher_Native_restoreReturnCamera(_env: JNIEnv, _c: JClass) {
+    with((), |b| b.launcher.restore_return_camera());
+}
+
+/// The app could not be launched: forget the pending return view.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_drift_launcher_Native_cancelReturnCamera(_env: JNIEnv, _c: JClass) {
+    with((), |b| b.launcher.cancel_return_camera());
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_drift_launcher_Native_returnHome(_env: JNIEnv, _c: JClass) {
     with((), |b| b.launcher.return_home());

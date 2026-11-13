@@ -45,6 +45,12 @@ final class Native {
 
     static native void onHome();
 
+    /** Returning to the launcher: snap back to the view the user had before launching an app. */
+    static native void restoreReturnCamera();
+
+    /** The app could not be launched: forget the pending return view. */
+    static native void cancelReturnCamera();
+
     /** Fit every card on screen after the camera was panned into empty space. */
     static native void returnHome();
 
