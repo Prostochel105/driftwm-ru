@@ -20,6 +20,7 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -50,6 +51,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
     private ThumbCache thumbs;
     private CanvasView canvas;
     private DrawerView drawer;
+    private FolderView folder;
     private FrameLayout root;
     private TextView homePill;
     private Toast toast;
@@ -66,6 +68,10 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
     private OnBackInvokedCallback backCallback;
 
     private boolean ready;
+
+    /** Which mode the app list was opened in, so a folder pick can reopen the folder. */
+    private int drawerMode = DrawerView.MODE_NORMAL;
+    private int drawerSlot = -1;
 
     private Appearance appearance = Appearance.defaults();
     private long appearanceRev = -1;
@@ -119,15 +125,37 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         thumbs.setListener(() -> canvas.invalidate());
         canvas = new CanvasView(this, icons, thumbs);
         drawer = new DrawerView(this, repo, icons);
+        folder = new FolderView(this, repo, icons);
         canvas.setHost(this);
         drawer.setCallback(this);
+        folder.setCallback(new FolderView.Callback() {
+            @Override public void onLaunch(String key) {
+                folder.hide();
+                launch(key);
+            }
+
+            @Override public void onAdd(int slot) {
+                showDrawer(DrawerView.MODE_FOLDER, slot);
+            }
+
+            @Override public void onRename(int slot, String currentName) {
+                showRenameDialog(slot, currentName);
+            }
+
+            @Override public void onClose() {
+                updateBars();
+                canvas.invalidate();
+            }
+        });
         icons.setListener(() -> {
             canvas.invalidate();
             drawer.iconsLoaded();
+            folder.iconsLoaded();
         });
         repo.setListener(() -> {
             icons.retry();
             drawer.refresh();
+            folder.refresh();
             canvas.invalidate();
         });
         // Start the first app-list query before the view hierarchy is attached:
@@ -139,6 +167,8 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         root.addView(canvas, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         root.addView(drawer, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.addView(folder, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         homePill = new TextView(this);
@@ -219,6 +249,9 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         super.onNewIntent(intent);
         if (!ready) return;
         // Home pressed while the launcher is already showing.
+        if (folder.isShowing()) {
+            folder.hide();
+        }
         if (drawer.isShowing()) {
             drawer.hide();
         }
@@ -246,7 +279,9 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
 
     private void handleBack() {
         if (!ready) return;
-        if (drawer.isShowing()) {
+        if (folder.isShowing()) {
+            folder.hide();
+        } else if (drawer.isShowing()) {
             drawer.hide();
         } else if (Native.onBack()) {
             canvas.invalidate();
@@ -264,12 +299,29 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
                 case "launch":
                     launch(arg);
                     break;
-                case "drawer":
-                    showDrawer(parseInt(arg, -1));
+                case "drawer": {
+                    String[] d = arg.split("\t", -1);
+                    int mode = d.length > 0 ? parseInt(d[0], DrawerView.MODE_NORMAL) : DrawerView.MODE_NORMAL;
+                    int slot = d.length > 1 ? parseInt(d[1], -1) : -1;
+                    showDrawer(mode, slot);
                     break;
+                }
                 case "dockmenu":
                     showDockMenu(parseInt(arg, 0));
                     break;
+                case "foldermenu": {
+                    String[] f = arg.split("\t", 2);
+                    showFolderMenu(parseInt(f[0], 0), f.length > 1 ? f[1] : "");
+                    break;
+                }
+                case "openfolder":
+                    showFolder(parseInt(arg, -1));
+                    break;
+                case "renamefolder": {
+                    String[] f = arg.split("\t", 2);
+                    showRenameDialog(parseInt(f[0], 0), f.length > 1 ? f[1] : "");
+                    break;
+                }
                 case "toast":
                     toast(arg);
                     break;
@@ -357,6 +409,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         appearance = a;
         canvas.setAppearance(a);
         drawer.setAppearance(a);
+        folder.setAppearance(a);
         styleHomePill();
         updateBars();
     }
@@ -382,7 +435,7 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
             if (ic == null) return;
             boolean lightStatus;
             boolean lightNav;
-            if (drawer != null && drawer.isShowing()) {
+            if ((drawer != null && drawer.isShowing()) || (folder != null && folder.isShowing())) {
                 lightStatus = appearance.pal.light;
                 lightNav = lightStatus;
             } else {
@@ -436,19 +489,32 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
             .show();
     }
 
-    private void showDrawer(int slot) {
+    private void showDrawer(int mode, int slot) {
         hideHomePill();
-        drawer.show(slot);
+        drawerMode = mode;
+        drawerSlot = slot;
+        drawer.show(mode, slot);
+        updateBars();
+    }
+
+    private void showFolder(int slot) {
+        if (slot < 0) return;
+        hideHomePill();
+        if (drawer.isShowing()) drawer.hide();
+        folder.show(slot);
         updateBars();
     }
 
     private void showDockMenu(int slot) {
-        String[] items = {L.t("Replace app"), L.t("Remove from dock")};
+        String[] items = {L.t("Replace app"), L.t("Create folder"), L.t("Remove from dock")};
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(L.t("Dock slot ", "Слот дока ") + (slot + 1))
             .setItems(items, (d, which) -> {
                 if (which == 0) {
                     Native.dockReplace(slot);
+                } else if (which == 1) {
+                    Native.dockCreateFolder(slot, L.t("Folder"));
+                    showFolder(slot); // straight into the new folder to add more apps
                 } else {
                     Native.dockRemove(slot);
                 }
@@ -457,13 +523,58 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
             .show();
     }
 
+    private void showFolderMenu(int slot, String name) {
+        String[] items = {L.t("Rename folder"), L.t("Remove from dock")};
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(name)
+            .setItems(items, (d, which) -> {
+                if (which == 0) {
+                    showRenameDialog(slot, name);
+                } else {
+                    Native.dockRemove(slot);
+                    canvas.invalidate();
+                }
+            })
+            .show();
+    }
+
+    private void showRenameDialog(int slot, String current) {
+        final EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setText(current == null ? "" : current);
+        input.setSelection(input.getText().length());
+        int pad = dp(16);
+        FrameLayout wrap = new FrameLayout(this);
+        wrap.setPadding(pad, dp(8), pad, 0);
+        wrap.addView(input, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(L.t("Folder name"))
+            .setView(wrap)
+            .setPositiveButton(android.R.string.ok, (d, w) -> {
+                String name = input.getText().toString().trim();
+                if (name.isEmpty()) name = L.t("Folder");
+                Native.dockRenameFolder(slot, name);
+                canvas.invalidate();
+                folder.refresh();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
     // ---- drawer callbacks ------------------------------------------------------
 
     @Override public void onPick(String key) {
-        // The core decides: jump to an existing card, create + launch, or fill a dock slot.
+        // The core decides: jump to an existing card, create + launch, fill a dock
+        // slot, or add to a dock folder.
+        int mode = drawerMode;
+        int slot = drawerSlot;
         Native.drawerPick(key);
         drawer.hide();
         canvas.invalidate();
+        if (mode == DrawerView.MODE_FOLDER) {
+            showFolder(slot); // back into the folder so more apps can be added
+        }
     }
 
     @Override public void onClose() {

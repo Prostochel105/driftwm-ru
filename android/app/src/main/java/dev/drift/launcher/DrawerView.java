@@ -35,6 +35,11 @@ final class DrawerView extends LinearLayout {
         void onSettings();
     }
 
+    /** What picking an app means: open it, fill a dock slot, or add to a dock folder. */
+    static final int MODE_NORMAL = 0;
+    static final int MODE_SLOT = 1;
+    static final int MODE_FOLDER = 2;
+
     private final float density;
     private final AppRepo repo;
     private final IconCache icons;
@@ -42,7 +47,7 @@ final class DrawerView extends LinearLayout {
     private final EditText search;
     private final TextView settingsRow;
     private Appearance.Palette pal = Appearance.defaults().pal;
-    private int slotMode = -1;
+    private int mode = MODE_NORMAL;
     private final ListView listView;
     private final Adapter adapter = new Adapter();
     private Callback callback;
@@ -148,11 +153,17 @@ final class DrawerView extends LinearLayout {
         return getVisibility() == VISIBLE;
     }
 
-    /** @param slot dock slot being chosen (0-based), or -1 for the normal list */
-    void show(int slot) {
-        slotMode = slot;
-        if (slot >= 0) {
+    /**
+     * @param mode {@link #MODE_NORMAL}, {@link #MODE_SLOT} or {@link #MODE_FOLDER}
+     * @param slot dock slot (for {@link #MODE_SLOT} and {@link #MODE_FOLDER}), 0-based
+     */
+    void show(int mode, int slot) {
+        this.mode = mode;
+        if (mode == MODE_SLOT) {
             title.setText(L.t("Choose an app for dock slot ") + (slot + 1));
+            title.setVisibility(VISIBLE);
+        } else if (mode == MODE_FOLDER) {
+            title.setText(L.t("Add app to folder"));
             title.setVisibility(VISIBLE);
         } else {
             title.setVisibility(GONE);
@@ -188,7 +199,7 @@ final class DrawerView extends LinearLayout {
         keys = found == null ? new String[0] : found;
         String q = search.getText().toString().trim().toLowerCase(java.util.Locale.ROOT);
         boolean matches = L.settingsMatches(q);
-        settingsRow.setVisibility(slotMode < 0 && matches ? VISIBLE : GONE);
+        settingsRow.setVisibility(mode == MODE_NORMAL && matches ? VISIBLE : GONE);
         adapter.notifyDataSetChanged();
     }
 

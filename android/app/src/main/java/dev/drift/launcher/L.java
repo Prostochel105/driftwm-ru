@@ -55,6 +55,8 @@ final class L {
             "Один цвет для карточек, дока, кнопок, текста и списка приложений.");
         put("Reset appearance", "Сбросить оформление");
         put("Default colors, no picture", "Цвета по умолчанию, без картинки");
+        put("Dock apps", "Приложения в доке");
+        put("How many slots the dock shows", "Сколько слотов показывает док");
         put("Reset colors and remove the background picture?",
             "Сбросить цвета и удалить фоновое изображение?");
         put("Reset", "Сбросить");
@@ -105,6 +107,7 @@ final class L {
         put("Search apps", "Поиск приложений");
         put("Drift settings  \u203A", "Настройки Drift  \u203A");
         put("Choose an app for dock slot ", "Выберите приложение для слота дока ");
+        put("Add app to folder", "Добавить приложение в папку");
 
         // Colour picker
         put("Default", "По умолчанию");
@@ -123,6 +126,13 @@ final class L {
         put("Replace app", "Заменить приложение");
         put("Remove from dock", "Убрать из дока");
         put("Dock slot ", "Слот дока ");
+        put("Create folder", "Создать папку");
+        put("Rename folder", "Переименовать папку");
+        put("Folder name", "Название папки");
+        put("Folder", "Папка");
+        put("Add", "Добавить");
+        put("Take ", "Убрать ");
+        put(" out of the folder?", " из папки?");
         put("Drift crashed. Details (select and copy, or send to the developer):",
             "Drift упал. Подробности (выделите и скопируйте или отправьте разработчику):");
         put("Clear report and retry", "Очистить отчёт и повторить");

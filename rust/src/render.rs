@@ -9,6 +9,7 @@
 //!   an f32 high part and an f32 remainder so a background tiled on the canvas stays
 //!   exact far from the origin), then `n_cards * CARD_STRIDE`, `n_links * LINK_STRIDE`, `n_ui * UI_STRIDE`.
 
+use crate::dock::DockItem;
 use crate::launcher::Launcher;
 use crate::ui::UiId;
 use crate::workspace::{Rect, Vec2};
@@ -60,16 +61,26 @@ impl Launcher {
     }
 
     /// Strings the view needs next to the numeric display list, one record per
-    /// line: `c\tkey\tlabel\tavail` for each card in z-order, `d\tslot\tkey`
-    /// for each filled dock slot. Cards appear in the same order as the list.
+    /// line: `c\tkey\tlabel\tavail` for each card in z-order, `d\tslot\tkey` for
+    /// a dock app slot, `f\tslot\tname\tkey...` for a dock folder. Cards appear
+    /// in the same order as the list.
     pub fn string_table(&self) -> String {
         let mut s = String::new();
         for c in &self.cards {
             s.push_str(&format!("c\t{}\t{}\t{}\n", c.key, c.label.replace(['\t', '\n'], " "), u8::from(c.available)));
         }
         for (i, slot) in self.dock.slots().iter().enumerate() {
-            if let Some(k) = slot {
-                s.push_str(&format!("d\t{i}\t{k}\n"));
+            match slot {
+                Some(DockItem::App(k)) => s.push_str(&format!("d\t{i}\t{k}\n")),
+                Some(DockItem::Folder(f)) => {
+                    s.push_str(&format!("f\t{i}\t{}", f.name.replace(['\t', '\n'], " ")));
+                    for a in &f.apps {
+                        s.push('\t');
+                        s.push_str(a);
+                    }
+                    s.push('\n');
+                }
+                None => {}
             }
         }
         s
@@ -186,7 +197,7 @@ impl Launcher {
                 flags |= UI_FILLED; // preview currently shown
             }
             if let UiId::DockSlot(i) = item.id {
-                if self.dock.get(i as usize).is_some() {
+                if self.dock.item(i as usize).is_some() {
                     flags |= UI_FILLED;
                 }
                 if let Some((from, over, _)) = dock_drag {

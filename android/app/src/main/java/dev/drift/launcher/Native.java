@@ -43,6 +43,25 @@ final class Native {
 
     static native void dockReplace(int slot);
 
+    /** Dock slot count from settings (3..8). */
+    static native void setDockCount(int count);
+
+    /** Current dock slot count. */
+    static native int dockCount();
+
+    /** Turn the app in a dock slot into a folder with the given (localized) name. */
+    static native void dockCreateFolder(int slot, String name);
+
+    static native void dockRenameFolder(int slot, String name);
+
+    /** Remove one app from a dock folder. */
+    static native void dockRemoveFolderApp(int slot, String key);
+
+    /** App keys inside a dock folder, in order. */
+    static native String[] folderApps(int slot);
+
+    static native String folderName(int slot);
+
     static native void onHome();
 
     /** Returning to the launcher: snap back to the view the user had before launching an app. */

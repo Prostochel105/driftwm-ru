@@ -33,14 +33,29 @@ pub struct Card {
     pub preview: bool,
 }
 
+/// Why the all-apps list is open: nothing special, filling a dock slot, or
+/// adding an app to a dock folder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DrawerMode {
+    Normal,
+    Slot(usize),
+    Folder(usize),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     /// Start this app through the Android launcher APIs.
     Launch(String),
-    /// Show the all-apps list; `Some(slot)` means "pick an app for this dock slot".
-    OpenDrawer(Option<usize>),
-    /// Offer replace/remove for a dock slot.
+    /// Show the all-apps list.
+    OpenDrawer(DrawerMode),
+    /// Offer replace / create folder / remove for a dock app slot.
     DockMenu(usize),
+    /// Offer rename / remove for a dock folder slot (with its current name).
+    FolderMenu(usize, String),
+    /// Show the contents of a dock folder.
+    OpenFolder(usize),
+    /// Ask for a new folder name (with the current one to prefill).
+    RenameFolder(usize, String),
     Toast(String),
     Haptic,
     /// Workspace changed in a way worth persisting.
@@ -52,13 +67,31 @@ impl Event {
     pub fn encode(&self) -> String {
         match self {
             Event::Launch(k) => format!("launch\t{k}"),
-            Event::OpenDrawer(None) => "drawer\t-1".to_owned(),
-            Event::OpenDrawer(Some(s)) => format!("drawer\t{s}"),
+            Event::OpenDrawer(DrawerMode::Normal) => "drawer\t0".to_owned(),
+            Event::OpenDrawer(DrawerMode::Slot(s)) => format!("drawer\t1\t{s}"),
+            Event::OpenDrawer(DrawerMode::Folder(s)) => format!("drawer\t2\t{s}"),
             Event::DockMenu(s) => format!("dockmenu\t{s}"),
+            Event::FolderMenu(s, n) => format!("foldermenu\t{s}\t{n}"),
+            Event::OpenFolder(s) => format!("openfolder\t{s}"),
+            Event::RenameFolder(s, n) => format!("renamefolder\t{s}\t{n}"),
             Event::Toast(t) => format!("toast\t{t}"),
             Event::Haptic => "haptic".to_owned(),
             Event::Save => "save".to_owned(),
         }
+    }
+}
+
+/// Folder names reach the JNI wire format, so strip separators and keep them short.
+fn sanitize_name(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| if c == '\t' || c == '\n' || c == '\r' { ' ' } else { c })
+        .collect();
+    let trimmed = cleaned.trim();
+    if trimmed.is_empty() {
+        "Folder".to_owned()
+    } else {
+        trimmed.chars().take(40).collect()
     }
 }
 
@@ -94,7 +127,7 @@ pub struct Launcher {
     pub(crate) last_tick: Option<u64>,
     pub(crate) layout_version: u32,
     pub(crate) geom: Option<Geometry>,
-    pub(crate) drawer_pick: Option<usize>,
+    pub(crate) drawer_pick: Option<DrawerMode>,
     next_id: u64,
 }
 
@@ -299,7 +332,7 @@ impl Launcher {
     }
 
     pub fn ui_layout(&self) -> UiLayout {
-        layout(self.viewport, self.insets, self.selected.is_some())
+        layout(self.viewport, self.insets, self.selected.is_some(), self.dock.count())
     }
 
     pub fn min_zoom(&self) -> f64 {
@@ -630,23 +663,31 @@ impl Launcher {
     }
 
     pub fn drawer_pick(&mut self, key: &str) {
-        match self.drawer_pick.take() {
-            Some(slot) => {
-                if self.is_installed(key) {
-                    self.dock.assign(slot, key);
-                    self.bump_layout();
-                    self.emit(Event::Save);
-                } else {
-                    self.toast("This app is not available");
-                }
-            }
-            None => self.launch_app(key, LaunchSource::Drawer),
+        let Some(mode) = self.drawer_pick.take() else {
+            return;
+        };
+        if mode == DrawerMode::Normal {
+            self.launch_app(key, LaunchSource::Drawer);
+            return;
+        }
+        if !self.is_installed(key) {
+            self.toast("This app is not available");
+            return;
+        }
+        let changed = match mode {
+            DrawerMode::Normal => false,
+            DrawerMode::Slot(slot) => self.dock.assign(slot, key),
+            DrawerMode::Folder(slot) => self.dock.move_to_folder(slot, key),
+        };
+        if changed {
+            self.bump_layout();
+            self.emit(Event::Save);
         }
     }
 
-    pub fn open_drawer(&mut self, pick_slot: Option<usize>) {
-        self.drawer_pick = pick_slot;
-        self.emit(Event::OpenDrawer(pick_slot));
+    pub fn open_drawer(&mut self, mode: DrawerMode) {
+        self.drawer_pick = Some(mode);
+        self.emit(Event::OpenDrawer(mode));
     }
 
     pub fn drawer_closed(&mut self) {
@@ -661,7 +702,48 @@ impl Launcher {
     }
 
     pub fn dock_replace(&mut self, slot: usize) {
-        self.open_drawer(Some(slot));
+        self.open_drawer(DrawerMode::Slot(slot));
+    }
+
+    /// Resize the dock from the settings screen.
+    pub fn dock_set_count(&mut self, n: usize) {
+        let n = n.clamp(crate::dock::MIN_SLOTS, crate::dock::MAX_SLOTS);
+        if self.dock.count() != n {
+            self.dock.set_count(n);
+            self.bump_layout();
+            self.emit(Event::Save);
+        }
+    }
+
+    /// Turn the app in a dock slot into a one-app folder (long-press menu).
+    pub fn dock_create_folder(&mut self, slot: usize, name: &str) {
+        if self.dock.make_folder(slot, &sanitize_name(name)) {
+            self.bump_layout();
+            self.emit(Event::Save);
+        }
+    }
+
+    pub fn dock_rename_folder(&mut self, slot: usize, name: &str) {
+        if self.dock.rename_folder(slot, &sanitize_name(name)) {
+            self.bump_layout();
+            self.emit(Event::Save);
+        }
+    }
+
+    pub fn dock_remove_folder_app(&mut self, slot: usize, key: &str) {
+        if self.dock.remove_from_folder(slot, key) {
+            self.bump_layout();
+            self.emit(Event::Save);
+        }
+    }
+
+    /// Apps inside a dock folder, for the folder popup.
+    pub fn folder_apps(&self, slot: usize) -> Vec<String> {
+        self.dock.folder_at(slot).map(|f| f.apps.clone()).unwrap_or_default()
+    }
+
+    pub fn folder_name(&self, slot: usize) -> String {
+        self.dock.folder_at(slot).map(|f| f.name.clone()).unwrap_or_default()
     }
 
     /// Back/Home pressed while already on the launcher.
@@ -871,11 +953,67 @@ mod tests {
     #[test]
     fn drawer_pick_assigns_slot_instead_of_launching() {
         let mut l = launcher();
-        l.open_drawer(Some(3));
+        l.open_drawer(DrawerMode::Slot(3));
         l.drawer_pick("c");
         assert_eq!(l.dock.get(3), Some("c"));
         assert!(l.cards.is_empty());
         assert!(!drain(&mut l).iter().any(|e| matches!(e, Event::Launch(_))));
+    }
+
+    #[test]
+    fn dock_count_setting_resizes_and_saves() {
+        let mut l = launcher();
+        l.dock.assign(4, "e");
+        l.dock_set_count(3);
+        assert_eq!(l.dock.count(), 3);
+        assert_eq!(l.dock.position_of("e"), None);
+        assert!(drain(&mut l).iter().any(|e| matches!(e, Event::Save)));
+        l.dock_set_count(3);
+        assert!(!drain(&mut l).iter().any(|e| matches!(e, Event::Save)), "no change, no save");
+    }
+
+    #[test]
+    fn create_folder_from_dock_slot() {
+        let mut l = launcher();
+        l.dock.assign(1, "a");
+        l.dock_create_folder(1, "Games");
+        assert_eq!(l.folder_name(1), "Games");
+        assert_eq!(l.folder_apps(1), vec!["a"]);
+        assert!(drain(&mut l).iter().any(|e| matches!(e, Event::Save)));
+    }
+
+    #[test]
+    fn drawer_pick_adds_to_folder() {
+        let mut l = launcher();
+        l.dock.assign(1, "a");
+        l.dock_create_folder(1, "Games");
+        l.open_drawer(DrawerMode::Folder(1));
+        l.drawer_pick("b");
+        assert_eq!(l.folder_apps(1), vec!["a", "b"]);
+        assert!(l.cards.is_empty(), "picking for a folder never launches");
+    }
+
+    #[test]
+    fn rename_and_remove_folder_app() {
+        let mut l = launcher();
+        l.dock.assign(1, "a");
+        l.dock_create_folder(1, "Games");
+        l.dock_rename_folder(1, "  Play  ");
+        assert_eq!(l.folder_name(1), "Play", "name is trimmed");
+        l.dock_remove_folder_app(1, "a");
+        assert_eq!(l.dock.item(1), None, "emptied folder becomes an empty slot");
+    }
+
+    #[test]
+    fn folder_name_is_sanitized() {
+        let mut l = launcher();
+        l.dock.assign(1, "a");
+        l.dock_create_folder(1, "A\tB\nC");
+        assert_eq!(l.folder_name(1), "A B C");
+        l.dock.assign(2, "b");
+        l.dock_create_folder(2, "x");
+        l.dock_rename_folder(2, "   ");
+        assert_eq!(l.folder_name(2), "Folder", "blank name falls back");
     }
 
     #[test]

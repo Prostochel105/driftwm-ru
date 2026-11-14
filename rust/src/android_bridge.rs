@@ -311,6 +311,90 @@ pub extern "system" fn Java_dev_drift_launcher_Native_dockReplace(
     with((), |b| b.launcher.dock_replace(slot.max(0) as usize));
 }
 
+/// Resize the dock (settings screen): 3..8 slots.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_drift_launcher_Native_setDockCount(
+    _env: JNIEnv,
+    _c: JClass,
+    count: jint,
+) {
+    with((), |b| b.launcher.dock_set_count(count.max(0) as usize));
+}
+
+/// Turn the app in a dock slot into a folder with the given (localized) name.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_drift_launcher_Native_dockCreateFolder(
+    mut env: JNIEnv,
+    _c: JClass,
+    slot: jint,
+    name: JString,
+) {
+    let name = jstr(&mut env, &name);
+    with((), |b| b.launcher.dock_create_folder(slot.max(0) as usize, &name));
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_drift_launcher_Native_dockRenameFolder(
+    mut env: JNIEnv,
+    _c: JClass,
+    slot: jint,
+    name: JString,
+) {
+    let name = jstr(&mut env, &name);
+    with((), |b| b.launcher.dock_rename_folder(slot.max(0) as usize, &name));
+}
+
+/// Remove one app from a dock folder.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_drift_launcher_Native_dockRemoveFolderApp(
+    mut env: JNIEnv,
+    _c: JClass,
+    slot: jint,
+    key: JString,
+) {
+    let key = jstr(&mut env, &key);
+    with((), |b| b.launcher.dock_remove_folder_app(slot.max(0) as usize, &key));
+}
+
+/// App keys inside a dock folder, in order.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_drift_launcher_Native_folderApps(
+    mut env: JNIEnv,
+    _c: JClass,
+    slot: jint,
+) -> jobjectArray {
+    let keys = with(Vec::new(), |b| b.launcher.folder_apps(slot.max(0) as usize));
+    let Ok(string_class) = env.find_class("java/lang/String") else {
+        return std::ptr::null_mut();
+    };
+    let Ok(arr) = env.new_object_array(keys.len() as jint, string_class, JString::default()) else {
+        return std::ptr::null_mut();
+    };
+    for (i, k) in keys.iter().enumerate() {
+        if let Ok(s) = env.new_string(k) {
+            let _ = env.set_object_array_element(&arr, i as jint, &s);
+            let _ = env.delete_local_ref(s);
+        }
+    }
+    arr.into_raw()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_drift_launcher_Native_folderName(
+    env: JNIEnv,
+    _c: JClass,
+    slot: jint,
+) -> jstring {
+    let name = with(String::new(), |b| b.launcher.folder_name(slot.max(0) as usize));
+    env.new_string(name).map_or(std::ptr::null_mut(), |j| j.into_raw())
+}
+
+/// Current dock slot count, for the settings screen.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_drift_launcher_Native_dockCount(_env: JNIEnv, _c: JClass) -> jint {
+    with(crate::dock::DEFAULT_SLOTS as jint, |b| b.launcher.dock.count() as jint)
+}
+
 /// Home pressed while the launcher is already showing.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_drift_launcher_Native_onHome(_env: JNIEnv, _c: JClass) {

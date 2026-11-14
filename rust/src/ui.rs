@@ -2,7 +2,6 @@
 //! the selection toolbar. None of these are canvas objects, so they never move
 //! with the camera. All coordinates are dp in screen space.
 
-use crate::dock::SLOTS;
 use crate::workspace::{Rect, Vec2};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,26 +64,28 @@ const DRAWER_BTN: f64 = 52.0;
 const ROW_GAP: f64 = 10.0;
 const PILL_PAD: f64 = 6.0;
 const SLOT_GAP: f64 = 4.0;
+const MIN_SLOT: f64 = 16.0;
 const MAX_SLOT: f64 = 60.0;
 const NAV_BTN: f64 = 40.0;
 const TOOL_W: f64 = 64.0;
 const TOOL_H: f64 = 40.0;
 const TOOL_GAP: f64 = 8.0;
 
-pub fn layout(viewport: Vec2, insets: Insets, has_selection: bool) -> UiLayout {
+pub fn layout(viewport: Vec2, insets: Insets, has_selection: bool, slots: usize) -> UiLayout {
     let left = insets.left + MARGIN;
     let right = viewport.x - insets.right - MARGIN;
     let bottom = viewport.y - insets.bottom - BOTTOM_PAD;
 
+    let slots = slots.max(1);
+    let n = slots as f64;
     let pill_avail = (right - left) - ROW_GAP - DRAWER_BTN;
-    let slot = ((pill_avail - 2.0 * PILL_PAD - SLOT_GAP * (SLOTS as f64 - 1.0)) / SLOTS as f64)
-        .clamp(24.0, MAX_SLOT);
-    let pill_w = slot * SLOTS as f64 + SLOT_GAP * (SLOTS as f64 - 1.0) + 2.0 * PILL_PAD;
+    let slot = ((pill_avail - 2.0 * PILL_PAD - SLOT_GAP * (n - 1.0)) / n).clamp(MIN_SLOT, MAX_SLOT);
+    let pill_w = slot * n + SLOT_GAP * (n - 1.0) + 2.0 * PILL_PAD;
     let pill_h = slot + 2.0 * PILL_PAD;
     let pill = Rect::new(left, bottom - pill_h, pill_w, pill_h);
 
     let mut items = Vec::new();
-    for i in 0..SLOTS {
+    for i in 0..slots {
         items.push(UiItem {
             id: UiId::DockSlot(i as u8),
             rect: Rect::new(
@@ -175,7 +176,7 @@ impl UiLayout {
 mod tests {
     use super::*;
 
-    fn lay(w: f64, h: f64, sel: bool) -> UiLayout {
+    fn lay_n(w: f64, h: f64, sel: bool, slots: usize) -> UiLayout {
         layout(
             Vec2::new(w, h),
             Insets {
@@ -185,7 +186,12 @@ mod tests {
                 bottom: 24.0,
             },
             sel,
+            slots,
         )
+    }
+
+    fn lay(w: f64, h: f64, sel: bool) -> UiLayout {
+        lay_n(w, h, sel, 5)
     }
 
     fn overlaps(a: &Rect, b: &Rect) -> bool {
@@ -207,15 +213,33 @@ mod tests {
     fn nothing_overlaps_on_narrow_and_wide_screens() {
         for (w, h) in [(320.0, 640.0), (360.0, 800.0), (412.0, 915.0), (800.0, 1280.0)] {
             for sel in [false, true] {
-                let l = lay(w, h, sel);
-                for (i, a) in l.items.iter().enumerate() {
-                    assert!(a.rect.x >= 0.0 && a.rect.x_high() <= w, "{:?} off-screen", a.id);
-                    assert!(a.rect.y >= 0.0 && a.rect.y_high() <= h, "{:?} off-screen", a.id);
-                    for b in l.items.iter().skip(i + 1) {
-                        assert!(!overlaps(&a.rect, &b.rect), "{:?} overlaps {:?} on {w}x{h}", a.id, b.id);
+                for slots in [3, 5, 8] {
+                    let l = lay_n(w, h, sel, slots);
+                    for (i, a) in l.items.iter().enumerate() {
+                        assert!(a.rect.x >= 0.0 && a.rect.x_high() <= w, "{:?} off-screen", a.id);
+                        assert!(a.rect.y >= 0.0 && a.rect.y_high() <= h, "{:?} off-screen", a.id);
+                        for b in l.items.iter().skip(i + 1) {
+                            assert!(!overlaps(&a.rect, &b.rect), "{:?} overlaps {:?} on {w}x{h} ({slots} slots)", a.id, b.id);
+                        }
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn eight_slots_fit_with_side_insets() {
+        let l = layout(
+            Vec2::new(320.0, 640.0),
+            Insets { left: 20.0, top: 24.0, right: 20.0, bottom: 24.0 },
+            false,
+            8,
+        );
+        let n = l.items.iter().filter(|i| matches!(i.id, UiId::DockSlot(_))).count();
+        assert_eq!(n, 8);
+        let drawer = l.rect_of(UiId::Drawer).unwrap();
+        for it in l.items.iter().filter(|i| matches!(i.id, UiId::DockSlot(_))) {
+            assert!(it.rect.x_high() <= drawer.x + 1e-9, "slots must not reach the drawer");
         }
     }
 
@@ -247,6 +271,7 @@ mod tests {
                 bottom: 0.0,
             },
             false,
+            5,
         );
         let first = l.rect_of(UiId::DockSlot(0)).unwrap();
         assert!(first.x >= 48.0);

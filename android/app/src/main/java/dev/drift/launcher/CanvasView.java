@@ -51,6 +51,9 @@ final class CanvasView extends View {
     private static final int UI_DRAG_OVER = 4;
     private static final int UI_DRAG_SOURCE = 8;
 
+    /** Upper bound on dock slots; the core may use fewer. */
+    private static final int MAX_SLOTS = 8;
+
     private static final int SNAP = 0xFF5ED6A0;
     private static final int[] GROUP = {
         0xFFE5766B, 0xFFE8B05C, 0xFF8FCB6A, 0xFF5DBFB4, 0xFF6C9BE8, 0xFFB58CE0
@@ -77,7 +80,10 @@ final class CanvasView extends View {
     private final ArrayList<String> keys = new ArrayList<>();
     private final ArrayList<String> labels = new ArrayList<>();
     private final ArrayList<Boolean> available = new ArrayList<>();
-    private final String[] slotKeys = new String[5];
+    /** Dock slot contents, from the string table: a plain app or a folder. */
+    private final String[] slotApp = new String[MAX_SLOTS];
+    private final String[] slotFolderName = new String[MAX_SLOTS];
+    private final String[][] slotFolderApps = new String[MAX_SLOTS][];
 
     private int insetL, insetT, insetR, insetB;
     private final ArrayList<String> pendingEvents = new ArrayList<>();
@@ -266,7 +272,9 @@ final class CanvasView extends View {
         keys.clear();
         labels.clear();
         available.clear();
-        Arrays.fill(slotKeys, null);
+        Arrays.fill(slotApp, null);
+        Arrays.fill(slotFolderName, null);
+        Arrays.fill(slotFolderApps, null);
         String table = Native.stringTable();
         if (table == null) return;
         for (String line : table.split("\n")) {
@@ -278,7 +286,17 @@ final class CanvasView extends View {
             } else if (p.length >= 3 && p[0].equals("d")) {
                 try {
                     int slot = Integer.parseInt(p[1]);
-                    if (slot >= 0 && slot < slotKeys.length) slotKeys[slot] = p[2];
+                    if (slot >= 0 && slot < slotApp.length) slotApp[slot] = p[2];
+                } catch (NumberFormatException ignored) {
+                    // malformed record: leave the slot empty
+                }
+            } else if (p.length >= 3 && p[0].equals("f")) {
+                try {
+                    int slot = Integer.parseInt(p[1]);
+                    if (slot >= 0 && slot < slotFolderName.length) {
+                        slotFolderName[slot] = p[2];
+                        slotFolderApps[slot] = Arrays.copyOfRange(p, 3, p.length);
+                    }
                 } catch (NumberFormatException ignored) {
                     // malformed record: leave the slot empty
                 }
@@ -557,9 +575,7 @@ final class CanvasView extends View {
         }
 
         if (dockDragSlot >= 0f && slotSize > 0f) {
-            int from = (int) dockDragSlot;
-            String key = from < slotKeys.length ? slotKeys[from] : null;
-            Bitmap icon = key == null ? null : icons.get(key);
+            Bitmap icon = slotIcon((int) dockDragSlot);
             float s = slotSize * 1.1f;
             float cx = dockDragX;
             float cy = py + ph / 2f;
@@ -582,9 +598,13 @@ final class CanvasView extends View {
             stroke.setStrokeWidth(2f);
             c.drawRoundRect(r, r.width() * 0.28f, r.width() * 0.28f, stroke);
         }
+        String folderName = slot >= 0 && slot < slotFolderName.length ? slotFolderName[slot] : null;
+        if (folderName != null) {
+            drawFolder(c, slot, pressed, flags);
+            return;
+        }
         if (filled) {
-            String key = slot < slotKeys.length ? slotKeys[slot] : null;
-            Bitmap icon = key == null ? null : icons.get(key);
+            Bitmap icon = slotIcon(slot);
             bitmapPaint.setAlpha((flags & UI_DRAG_SOURCE) != 0 ? 70 : 255);
             if (icon != null) {
                 r2.set(cx - s / 2f, cy - s / 2f, cx + s / 2f, cy + s / 2f);
@@ -606,6 +626,50 @@ final class CanvasView extends View {
             c.drawLine(cx - a, cy, cx + a, cy, stroke);
             c.drawLine(cx, cy - a, cx, cy + a, stroke);
         }
+    }
+
+    /** Icon of a dock slot: the app's, or the first app of a folder. */
+    private Bitmap slotIcon(int slot) {
+        if (slot < 0 || slot >= MAX_SLOTS) return null;
+        String key = slotApp[slot];
+        if (key == null && slotFolderApps[slot] != null && slotFolderApps[slot].length > 0) {
+            key = slotFolderApps[slot][0];
+        }
+        return key == null ? null : icons.get(key);
+    }
+
+    /** A dock folder: a rounded tile holding up to four mini app icons in a 2x2 grid. */
+    private void drawFolder(Canvas c, int slot, boolean pressed, int flags) {
+        String[] apps = slotFolderApps[slot];
+        float pad = r.width() * 0.12f;
+        float l = r.left + pad, t = r.top + pad, rr = r.right - pad, b = r.bottom - pad;
+        float inner = rr - l;
+        fill.setColor(pal.cardDrag);
+        c.drawRoundRect(l, t, rr, b, inner * 0.22f, inner * 0.22f, fill);
+        stroke.setColor(pal.stroke);
+        stroke.setStrokeWidth(1f);
+        c.drawRoundRect(l, t, rr, b, inner * 0.22f, inner * 0.22f, stroke);
+
+        int n = apps == null ? 0 : Math.min(apps.length, 4);
+        float gap = inner * 0.08f;
+        float cell = (inner - gap) / 2f;
+        bitmapPaint.setAlpha(pressed ? 200 : ((flags & UI_DRAG_SOURCE) != 0 ? 70 : 255));
+        for (int i = 0; i < n; i++) {
+            int col = i % 2;
+            int row = i / 2;
+            float cx = l + gap / 2f + col * (cell + gap) + cell / 2f;
+            float cy = t + gap / 2f + row * (cell + gap) + cell / 2f;
+            Bitmap icon = icons.get(apps[i]);
+            float hs = cell * 0.46f;
+            if (icon != null) {
+                r2.set(cx - hs, cy - hs, cx + hs, cy + hs);
+                c.drawBitmap(icon, null, r2, bitmapPaint);
+            } else {
+                fill.setColor(pal.placeholder);
+                c.drawCircle(cx, cy, hs, fill);
+            }
+        }
+        bitmapPaint.setAlpha(255);
     }
 
     private void drawDrawerButton(Canvas c, boolean pressed) {

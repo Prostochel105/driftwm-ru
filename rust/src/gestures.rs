@@ -6,7 +6,8 @@
 //! Scale handling follows DriftWM's touch recognizer: pan and zoom run together,
 //! zoom engages only after the finger spread changes by a ratio slop.
 
-use crate::launcher::{Event, LaunchSource, Launcher};
+use crate::dock::DockItem;
+use crate::launcher::{DrawerMode, Event, LaunchSource, Launcher};
 use crate::snapping::{SnapConfig, SnapRect, SnapState, cluster_of, snap_move};
 use crate::ui::UiId;
 use crate::workspace::{Direction, Rect, Vec2, edge_pan_velocity, snap_zoom, zoom_anchor_camera};
@@ -592,7 +593,7 @@ impl Launcher {
         {
             let allowed = matches!(target, Target::Card(_) | Target::Ui(UiId::DockSlot(_)));
             let filled = match target {
-                Target::Ui(UiId::DockSlot(s)) => self.dock.get(s as usize).is_some(),
+                Target::Ui(UiId::DockSlot(s)) => self.dock.item(s as usize).is_some(),
                 _ => true,
             };
             if allowed && filled {
@@ -797,24 +798,46 @@ impl Launcher {
         match ui {
             UiId::DockSlot(s) => {
                 let slot = s as usize;
-                match self.dock.get(slot).map(str::to_owned) {
-                    Some(_) if long => self.emit(Event::DockMenu(slot)),
-                    Some(key) => {
-                        if self.is_installed(&key) {
-                            let src = if self.cfg.dock_launches_existing {
-                                LaunchSource::Dock
-                            } else {
-                                LaunchSource::Drawer
-                            };
-                            self.launch_app(&key, src);
+                enum Action {
+                    Menu,
+                    FolderMenu(String),
+                    OpenFolder,
+                    Launch(String),
+                    Missing,
+                    Empty,
+                }
+                let action = match self.dock.item(slot) {
+                    Some(DockItem::Folder(f)) if long => Action::FolderMenu(f.name.clone()),
+                    Some(DockItem::Folder(_)) => Action::OpenFolder,
+                    Some(DockItem::App(_)) if long => Action::Menu,
+                    Some(DockItem::App(k)) => {
+                        if self.is_installed(k) {
+                            Action::Launch(k.clone())
                         } else {
-                            self.toast("This app is not installed. Long-press the slot to replace it");
+                            Action::Missing
                         }
                     }
-                    None => self.open_drawer(Some(slot)),
+                    None => Action::Empty,
+                };
+                match action {
+                    Action::Menu => self.emit(Event::DockMenu(slot)),
+                    Action::FolderMenu(name) => self.emit(Event::FolderMenu(slot, name)),
+                    Action::OpenFolder => self.emit(Event::OpenFolder(slot)),
+                    Action::Launch(key) => {
+                        let src = if self.cfg.dock_launches_existing {
+                            LaunchSource::Dock
+                        } else {
+                            LaunchSource::Drawer
+                        };
+                        self.launch_app(&key, src);
+                    }
+                    Action::Missing => {
+                        self.toast("This app is not installed. Long-press the slot to replace it");
+                    }
+                    Action::Empty => self.open_drawer(DrawerMode::Slot(slot)),
                 }
             }
-            UiId::Drawer => self.open_drawer(None),
+            UiId::Drawer => self.open_drawer(DrawerMode::Normal),
             UiId::Overview => self.toggle_overview(),
             UiId::Recent => self.cycle_recent(),
             UiId::ToolCenter => {
@@ -1312,7 +1335,7 @@ mod tests {
         assert!(ev.contains(&Event::Launch("a".into())));
         assert_eq!(l.cards.len(), 1);
         tap(&mut l, s1.x, s1.y, 2000);
-        assert!(events(&mut l).contains(&Event::OpenDrawer(Some(1))));
+        assert!(events(&mut l).contains(&Event::OpenDrawer(DrawerMode::Slot(1))));
     }
 
     #[test]
@@ -1320,7 +1343,7 @@ mod tests {
         let mut l = setup();
         let r = l.ui_layout().rect_of(UiId::Drawer).unwrap().center();
         tap(&mut l, r.x, r.y, 1000);
-        assert!(events(&mut l).contains(&Event::OpenDrawer(None)));
+        assert!(events(&mut l).contains(&Event::OpenDrawer(DrawerMode::Normal)));
     }
 
     #[test]
@@ -1361,6 +1384,24 @@ mod tests {
         let ev = events(&mut l);
         assert!(ev.contains(&Event::DockMenu(1)));
         assert!(!ev.iter().any(|e| matches!(e, Event::Launch(_))));
+    }
+
+    #[test]
+    fn dock_folder_tap_opens_and_long_press_offers_menu() {
+        let mut l = setup();
+        l.dock.assign(1, "a");
+        l.dock_create_folder(1, "Games");
+        let s = l.ui_layout().rect_of(UiId::DockSlot(1)).unwrap().center();
+        tap(&mut l, s.x, s.y, 1000);
+        let ev = events(&mut l);
+        assert!(ev.contains(&Event::OpenFolder(1)));
+        assert!(!ev.iter().any(|e| matches!(e, Event::Launch(_))));
+        l.touch(0, 0, px(s.x), px(s.y), 2000);
+        l.tick(2000);
+        l.tick(2500);
+        l.touch(2, 0, px(s.x), px(s.y), 2520);
+        let ev = events(&mut l);
+        assert!(ev.contains(&Event::FolderMenu(1, "Games".into())));
     }
 
     #[test]

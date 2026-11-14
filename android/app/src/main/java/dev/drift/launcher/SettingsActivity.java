@@ -222,6 +222,8 @@ public final class SettingsActivity extends Activity {
         content.addView(section("Interface"), lp(12, 6));
         content.addView(colorRow("Interface color", a.ui, Appearance.DEFAULT_UI, Appearance.K_UI), lp(0, 6));
         content.addView(caption("One color for cards, dock, buttons, text and the app list."), lp(0, 8));
+        content.addView(row("Dock apps", "How many slots the dock shows",
+            status(String.valueOf(Native.dockCount()), true), v -> showDockCount()), lp(0, 8));
         content.addView(row("Reset appearance", "Default colors, no picture", null, v ->
             new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                 .setMessage(L.t("Reset colors and remove the background picture?"))
@@ -231,6 +233,23 @@ public final class SettingsActivity extends Activity {
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()), lp(0, 8));
+    }
+
+    /** Pick 3..8 dock slots; long-press a slot on the home screen to make a folder. */
+    private void showDockCount() {
+        final int current = Native.dockCount();
+        final String[] labels = new String[6];
+        for (int i = 0; i < labels.length; i++) labels[i] = String.valueOf(i + 3);
+        int checked = Math.max(0, Math.min(labels.length - 1, current - 3));
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(L.t("Dock apps"))
+            .setSingleChoiceItems(labels, checked, (dlg, which) -> {
+                Native.setDockCount(which + 3);
+                dlg.dismiss();
+                rebuild();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
     }
 
     private void addQuickActions() {
