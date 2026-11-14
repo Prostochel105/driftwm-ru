@@ -651,6 +651,15 @@ final class CanvasView extends View {
         c.drawRoundRect(l, t, rr, b, inner * 0.22f, inner * 0.22f, stroke);
 
         int n = apps == null ? 0 : Math.min(apps.length, 4);
+        if (n == 0) {
+            // Empty folder: a plus hints that it is ready for its first app.
+            stroke.setColor(pal.accent);
+            stroke.setStrokeWidth(1.6f);
+            float a = inner * 0.18f;
+            float mx = l + inner / 2f, my = t + inner / 2f;
+            c.drawLine(mx - a, my, mx + a, my, stroke);
+            c.drawLine(mx, my - a, mx, my + a, stroke);
+        }
         float gap = inner * 0.08f;
         float cell = (inner - gap) / 2f;
         bitmapPaint.setAlpha(pressed ? 200 : ((flags & UI_DRAG_SOURCE) != 0 ? 70 : 255));

@@ -50,6 +50,8 @@ pub enum Event {
     OpenDrawer(DrawerMode),
     /// Offer replace / create folder / remove for a dock app slot.
     DockMenu(usize),
+    /// Offer add app / create folder for an empty dock slot.
+    EmptyDockMenu(usize),
     /// Offer rename / remove for a dock folder slot (with its current name).
     FolderMenu(usize, String),
     /// Show the contents of a dock folder.
@@ -71,6 +73,7 @@ impl Event {
             Event::OpenDrawer(DrawerMode::Slot(s)) => format!("drawer\t1\t{s}"),
             Event::OpenDrawer(DrawerMode::Folder(s)) => format!("drawer\t2\t{s}"),
             Event::DockMenu(s) => format!("dockmenu\t{s}"),
+            Event::EmptyDockMenu(s) => format!("emptydockmenu\t{s}"),
             Event::FolderMenu(s, n) => format!("foldermenu\t{s}\t{n}"),
             Event::OpenFolder(s) => format!("openfolder\t{s}"),
             Event::RenameFolder(s, n) => format!("renamefolder\t{s}\t{n}"),
@@ -705,6 +708,13 @@ impl Launcher {
         self.open_drawer(DrawerMode::Slot(slot));
     }
 
+    /// Open the app list to add an app to the folder in `slot` (the folder's "+"
+    /// tile). Routing this through the core is what makes the pick land in the
+    /// folder: `open_drawer` records the pending [`DrawerMode`] for `drawer_pick`.
+    pub fn dock_add_app(&mut self, slot: usize) {
+        self.open_drawer(DrawerMode::Folder(slot));
+    }
+
     /// Resize the dock from the settings screen.
     pub fn dock_set_count(&mut self, n: usize) {
         let n = n.clamp(crate::dock::MIN_SLOTS, crate::dock::MAX_SLOTS);
@@ -715,7 +725,8 @@ impl Launcher {
         }
     }
 
-    /// Turn the app in a dock slot into a one-app folder (long-press menu).
+    /// Turn a dock slot into a folder (long-press menu). An empty slot yields an
+    /// empty folder, ready for its first app; an app slot keeps its app inside.
     pub fn dock_create_folder(&mut self, slot: usize, name: &str) {
         if self.dock.make_folder(slot, &sanitize_name(name)) {
             self.bump_layout();
@@ -1001,7 +1012,34 @@ mod tests {
         l.dock_rename_folder(1, "  Play  ");
         assert_eq!(l.folder_name(1), "Play", "name is trimmed");
         l.dock_remove_folder_app(1, "a");
-        assert_eq!(l.dock.item(1), None, "emptied folder becomes an empty slot");
+        assert_eq!(
+            l.folder_apps(1),
+            Vec::<String>::new(),
+            "the folder stays, now empty"
+        );
+        assert!(l.dock.item(1).is_some(), "the folder keeps its slot");
+    }
+
+    #[test]
+    fn create_folder_in_empty_dock_slot() {
+        let mut l = launcher();
+        l.dock_create_folder(1, "Games");
+        assert_eq!(l.folder_name(1), "Games");
+        assert!(l.folder_apps(1).is_empty());
+        assert!(drain(&mut l).iter().any(|e| matches!(e, Event::Save)));
+    }
+
+    #[test]
+    fn dock_add_app_opens_the_folder_picker() {
+        let mut l = launcher();
+        l.dock_create_folder(1, "Games");
+        drain(&mut l);
+        l.dock_add_app(1);
+        let ev = drain(&mut l);
+        assert!(ev.contains(&Event::OpenDrawer(DrawerMode::Folder(1))));
+        // ...and the pending pick really lands in the folder.
+        l.drawer_pick("b");
+        assert_eq!(l.folder_apps(1), vec!["b"]);
     }
 
     #[test]

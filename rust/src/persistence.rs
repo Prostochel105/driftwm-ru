@@ -280,6 +280,20 @@ mod tests {
     }
 
     #[test]
+    fn empty_folder_survives_a_save_and_load() {
+        let d = tmpdir("emptyfolder");
+        let p = d.join("state.json");
+        let mut s = SavedState::empty();
+        s.dock.make_folder(1, "New");
+        write_atomic(&p, &to_json(&s)).unwrap();
+        let (back, src) = load(&p);
+        assert_eq!(src, LoadSource::Main);
+        let f = back.dock.folder_at(1).expect("an empty folder is kept on load");
+        assert_eq!(f.name, "New");
+        assert!(f.apps.is_empty());
+    }
+
+    #[test]
     fn missing_file_is_fresh_start() {
         let d = tmpdir("missing");
         let (s, src) = load(&d.join("nope.json"));

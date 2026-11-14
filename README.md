@@ -63,16 +63,16 @@ Realme 11 4G, V5.3.
 The dock sits at the bottom of the screen. It has 3 to 8 slots; change the number under
 **Interface → "Dock apps"**. The value is stored with the layout.
 
-- **Empty slot** — tap to choose an app from the list.
+- **Empty slot** — tap to choose an app; long-press opens its menu.
 - **Filled slot** — tap opens the app, long-press opens its menu.
 - **Reorder** — long-press a slot and drag it sideways.
 
 ### Folders
 
-- **Create** — long-press a slot → **"Create folder"**. The app stays inside and the folder opens right away.
-- **Add an app** — open the folder and tap **"+"**, then pick an app from the list.
+- **Create** — long-press a slot → **"Create folder"**. An app slot keeps its app inside; an empty slot opens an empty folder right away.
+- **Add an app** — open the folder and tap the free **"+"** slot, then pick an app; another free slot appears beside it.
 - **Open an app in a folder** — tap the folder, then tap the app.
-- **Take an app out** — open the folder, long-press the app → **"Remove"**.
+- **Take an app out** — open the folder, long-press the app → **"Remove"**. The folder stays with a free slot.
 - **Rename** — open the folder and tap its title; or long-press the folder in the dock → **"Rename folder"**.
 - **Remove the folder** — long-press the folder in the dock → **"Remove from dock"**.
 

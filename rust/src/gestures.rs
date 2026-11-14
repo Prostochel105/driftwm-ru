@@ -592,11 +592,7 @@ impl Launcher {
             && now.saturating_sub(down_ms) >= self.cfg.long_press_ms
         {
             let allowed = matches!(target, Target::Card(_) | Target::Ui(UiId::DockSlot(_)));
-            let filled = match target {
-                Target::Ui(UiId::DockSlot(s)) => self.dock.item(s as usize).is_some(),
-                _ => true,
-            };
-            if allowed && filled {
+            if allowed {
                 self.g.mode = Mode::Pending {
                     pid,
                     target,
@@ -800,6 +796,7 @@ impl Launcher {
                 let slot = s as usize;
                 enum Action {
                     Menu,
+                    EmptyMenu,
                     FolderMenu(String),
                     OpenFolder,
                     Launch(String),
@@ -817,10 +814,12 @@ impl Launcher {
                             Action::Missing
                         }
                     }
+                    None if long => Action::EmptyMenu,
                     None => Action::Empty,
                 };
                 match action {
                     Action::Menu => self.emit(Event::DockMenu(slot)),
+                    Action::EmptyMenu => self.emit(Event::EmptyDockMenu(slot)),
                     Action::FolderMenu(name) => self.emit(Event::FolderMenu(slot, name)),
                     Action::OpenFolder => self.emit(Event::OpenFolder(slot)),
                     Action::Launch(key) => {
@@ -1402,6 +1401,19 @@ mod tests {
         l.touch(2, 0, px(s.x), px(s.y), 2520);
         let ev = events(&mut l);
         assert!(ev.contains(&Event::FolderMenu(1, "Games".into())));
+    }
+
+    #[test]
+    fn dock_long_press_empty_slot_offers_create_folder() {
+        let mut l = setup();
+        let s = l.ui_layout().rect_of(UiId::DockSlot(2)).unwrap().center();
+        l.touch(0, 0, px(s.x), px(s.y), 1000);
+        l.tick(1000);
+        l.tick(1500);
+        l.touch(2, 0, px(s.x), px(s.y), 1520);
+        let ev = events(&mut l);
+        assert!(ev.contains(&Event::EmptyDockMenu(2)));
+        assert!(!ev.iter().any(|e| matches!(e, Event::OpenDrawer(_))));
     }
 
     #[test]

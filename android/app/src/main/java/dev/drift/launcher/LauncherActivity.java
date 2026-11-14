@@ -135,7 +135,10 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
             }
 
             @Override public void onAdd(int slot) {
-                showDrawer(DrawerView.MODE_FOLDER, slot);
+                // Go through the core: it records the pending "add to folder" pick
+                // and emits the drawer event, so the chosen app lands in the folder.
+                Native.dockAddApp(slot);
+                canvas.invalidate();
             }
 
             @Override public void onRename(int slot, String currentName) {
@@ -308,6 +311,9 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
                 }
                 case "dockmenu":
                     showDockMenu(parseInt(arg, 0));
+                    break;
+                case "emptydockmenu":
+                    showEmptyDockMenu(parseInt(arg, 0));
                     break;
                 case "foldermenu": {
                     String[] f = arg.split("\t", 2);
@@ -491,6 +497,9 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
 
     private void showDrawer(int mode, int slot) {
         hideHomePill();
+        // The folder popup sits above the drawer in the view stack and dims the
+        // whole screen; leaving it visible would hide the list being opened.
+        if (folder.isShowing()) folder.hide();
         drawerMode = mode;
         drawerSlot = slot;
         drawer.show(mode, slot);
@@ -517,6 +526,23 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
                     showFolder(slot); // straight into the new folder to add more apps
                 } else {
                     Native.dockRemove(slot);
+                }
+                canvas.invalidate();
+            })
+            .show();
+    }
+
+    /** Long-press on an empty dock slot: add an app or start a folder there. */
+    private void showEmptyDockMenu(int slot) {
+        String[] items = {L.t("Add app"), L.t("Create folder")};
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(L.t("Dock slot ", "Слот дока ") + (slot + 1))
+            .setItems(items, (d, which) -> {
+                if (which == 0) {
+                    Native.dockReplace(slot);
+                } else {
+                    Native.dockCreateFolder(slot, L.t("Folder"));
+                    showFolder(slot); // straight into the new folder to add apps
                 }
                 canvas.invalidate();
             })

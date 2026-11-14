@@ -311,6 +311,16 @@ pub extern "system" fn Java_dev_drift_launcher_Native_dockReplace(
     with((), |b| b.launcher.dock_replace(slot.max(0) as usize));
 }
 
+/// Open the app list to add an app to the folder in `slot` (the folder's "+" tile).
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_drift_launcher_Native_dockAddApp(
+    _env: JNIEnv,
+    _c: JClass,
+    slot: jint,
+) {
+    with((), |b| b.launcher.dock_add_app(slot.max(0) as usize));
+}
+
 /// Resize the dock (settings screen): 3..8 slots.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_drift_launcher_Native_setDockCount(

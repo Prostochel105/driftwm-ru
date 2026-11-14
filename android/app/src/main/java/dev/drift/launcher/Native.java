@@ -43,6 +43,9 @@ final class Native {
 
     static native void dockReplace(int slot);
 
+    /** Open the app list to add an app to the folder in this dock slot. */
+    static native void dockAddApp(int slot);
+
     /** Dock slot count from settings (3..8). */
     static native void setDockCount(int count);
 

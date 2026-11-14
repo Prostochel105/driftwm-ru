@@ -54,8 +54,8 @@ impl Dock {
     }
 
     /// Restore from persisted data of any length: the slot count is clamped,
-    /// every key may appear only once anywhere in the dock, and a folder that
-    /// ends up empty becomes an empty slot.
+    /// every key may appear only once anywhere in the dock. A folder may be
+    /// empty (it still holds a slot and offers its "add" tile).
     pub fn normalized(mut self) -> Self {
         let n = if self.slots.is_empty() {
             DEFAULT_SLOTS
@@ -84,9 +84,6 @@ impl Dock {
                     });
                     if f.name.trim().is_empty() {
                         f.name = FALLBACK_FOLDER_NAME.to_owned();
-                    }
-                    if f.apps.is_empty() {
-                        *slot = None;
                     }
                 }
                 None => {}
@@ -176,9 +173,11 @@ impl Dock {
         for slot in &mut self.slots {
             let drop = match slot {
                 Some(DockItem::App(k)) => !exists(k),
+                // A folder keeps its slot even when every app inside it is gone;
+                // it simply shows its "add" tile again.
                 Some(DockItem::Folder(f)) => {
                     f.apps.retain(|k| exists(k));
-                    f.apps.is_empty()
+                    false
                 }
                 None => false,
             };
@@ -190,7 +189,9 @@ impl Dock {
 
     // ---- folders --------------------------------------------------------------
 
-    /// Turn the app in `slot` into a one-app folder. No-op for empty/folder slots.
+    /// Turn `slot` into a folder named `name`. An app slot moves its app inside;
+    /// an empty slot becomes an empty folder that shows its "add" tile. No-op for
+    /// a slot that already holds a folder.
     pub fn make_folder(&mut self, slot: usize, name: &str) -> bool {
         let Some(entry) = self.slots.get_mut(slot) else {
             return false;
@@ -204,7 +205,14 @@ impl Dock {
                 }));
                 true
             }
-            _ => false,
+            None => {
+                *entry = Some(DockItem::Folder(Folder {
+                    name: name.to_owned(),
+                    apps: Vec::new(),
+                }));
+                true
+            }
+            Some(DockItem::Folder(_)) => false,
         }
     }
 
@@ -232,20 +240,17 @@ impl Dock {
         false
     }
 
-    /// Remove `key` from the folder in `slot`; an emptied folder becomes an empty slot.
+    /// Remove `key` from the folder in `slot`. The folder stays (possibly empty,
+    /// showing its "add" tile).
     pub fn remove_from_folder(&mut self, slot: usize, key: &str) -> bool {
-        let removed = match self.slots.get_mut(slot) {
+        match self.slots.get_mut(slot) {
             Some(Some(DockItem::Folder(f))) => {
                 let before = f.apps.len();
                 f.apps.retain(|a| a != key);
                 f.apps.len() != before
             }
             _ => false,
-        };
-        if removed {
-            self.prune_empty_folder(slot);
         }
-        removed
     }
 
     pub fn rename_folder(&mut self, slot: usize, name: &str) -> bool {
@@ -258,23 +263,11 @@ impl Dock {
         }
     }
 
+    /// Pull `key` out of the folder in `slot`, leaving the folder in place even
+    /// when it becomes empty.
     fn remove_from_folder_at(&mut self, slot: usize, key: &str) {
-        let empty = match self.slots.get_mut(slot) {
-            Some(Some(DockItem::Folder(f))) => {
-                f.apps.retain(|a| a != key);
-                f.apps.is_empty()
-            }
-            _ => false,
-        };
-        if empty {
-            self.slots[slot] = None;
-        }
-    }
-
-    fn prune_empty_folder(&mut self, slot: usize) {
-        let empty = matches!(self.slots.get(slot), Some(Some(DockItem::Folder(f))) if f.apps.is_empty());
-        if empty {
-            self.slots[slot] = None;
+        if let Some(Some(DockItem::Folder(f))) = self.slots.get_mut(slot) {
+            f.apps.retain(|a| a != key);
         }
     }
 }
@@ -397,7 +390,12 @@ mod tests {
         assert!(d.remove_from_folder(0, "a"));
         assert_eq!(d.folder_at(0).unwrap().apps, vec!["b"]);
         assert!(d.remove_from_folder(0, "b"));
-        assert_eq!(d.item(0), None, "an emptied folder becomes an empty slot");
+        assert_eq!(
+            d.folder_at(0).unwrap().apps,
+            Vec::<String>::new(),
+            "an emptied folder stays, ready for more apps"
+        );
+        assert!(d.item(0).is_some(), "the folder keeps its slot");
     }
 
     #[test]
@@ -410,7 +408,11 @@ mod tests {
         // Pulling the app out of a folder replaces the target slot with the app.
         d.assign(2, "a");
         assert_eq!(d.get(2), Some("a"));
-        assert_eq!(d.item(0), None, "source folder is gone once emptied");
+        assert_eq!(
+            d.folder_at(0).unwrap().apps,
+            Vec::<String>::new(),
+            "the source folder stays, now empty"
+        );
     }
 
     #[test]
@@ -436,7 +438,7 @@ mod tests {
     }
 
     #[test]
-    fn normalize_dedups_and_drops_empty_folders() {
+    fn normalize_dedups_and_keeps_empty_folders() {
         let d = Dock {
             slots: vec![
                 app("a"),
@@ -449,8 +451,34 @@ mod tests {
         assert_eq!(d.count(), 4, "a 4-slot dock is within range and kept");
         assert_eq!(d.get(0), Some("a"));
         assert_eq!(d.folder_at(1).unwrap().apps, vec!["b"], "duplicate dropped");
-        assert_eq!(d.item(2), None, "empty folder becomes an empty slot");
+        assert_eq!(
+            d.folder_at(2).unwrap().apps,
+            Vec::<String>::new(),
+            "an empty folder is kept"
+        );
         assert_eq!(d.folder_at(3).map(|f| f.name.as_str()), Some(FALLBACK_FOLDER_NAME));
+    }
+
+    #[test]
+    fn create_folder_in_empty_slot() {
+        let mut d = Dock::new();
+        assert!(d.make_folder(2, "New"));
+        let f = d.folder_at(2).unwrap();
+        assert_eq!(f.name, "New");
+        assert!(f.apps.is_empty());
+        assert_eq!(d.first_empty(), Some(0), "the folder occupies its slot");
+    }
+
+    #[test]
+    fn empty_folder_round_trips() {
+        let mut d = Dock::new();
+        d.make_folder(2, "New");
+        let s = serde_json::to_string(&d).unwrap();
+        let parsed: Dock = serde_json::from_str(&s).unwrap();
+        let back = parsed.normalized();
+        let f = back.folder_at(2).expect("an empty folder survives a save/load");
+        assert_eq!(f.name, "New");
+        assert!(f.apps.is_empty());
     }
 
     #[test]
@@ -460,10 +488,17 @@ mod tests {
         d.assign(1, "b");
         d.assign(2, "c");
         d.make_folder(2, "F");
+        d.assign(3, "gone");
+        d.make_folder(3, "G");
         d.clear_missing(|k| k == "a" || k == "c");
         assert_eq!(d.get(0), Some("a"));
         assert_eq!(d.get(1), None);
         assert_eq!(d.folder_at(2).unwrap().apps, vec!["c"]);
+        assert_eq!(
+            d.folder_at(3).unwrap().apps,
+            Vec::<String>::new(),
+            "a folder whose apps all vanished is kept"
+        );
     }
 
     #[test]

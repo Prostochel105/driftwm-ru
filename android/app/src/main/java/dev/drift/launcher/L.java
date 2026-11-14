@@ -128,6 +128,7 @@ final class L {
         put("Replace app", "Заменить приложение");
         put("Remove from dock", "Убрать из дока");
         put("Dock slot ", "Слот дока ");
+        put("Add app", "Добавить приложение");
         put("Create folder", "Создать папку");
         put("Rename folder", "Переименовать папку");
         put("Folder name", "Название папки");
