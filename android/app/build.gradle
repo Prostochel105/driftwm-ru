@@ -3,13 +3,24 @@ plugins {
 }
 
 // ABIs to build the Rust core for. A phone needs only arm64-v8a; add x86_64
-// for the emulator:  ./gradlew assembleDebug -PdriftAbis=arm64-v8a,x86_64
+// for the emulator:  ./gradlew assembleRelease -PdriftAbis=arm64-v8a,x86_64
 def abis = (project.findProperty('driftAbis') ?: 'arm64-v8a').toString().split(',').collect { it.trim() }
 // CI passes its run number so every build installs over the previous one.
-def vCode = (project.findProperty('versionCode') ?: '9').toString()
-def vName = (project.findProperty('versionName') ?: 'V5.5.1').toString()
+def vCode = (project.findProperty('versionCode') ?: '10').toString()
+def vName = (project.findProperty('versionName') ?: 'V5.5.2').toString()
 def rustDir = file("$rootDir/../rust")
 def jniOut = file("$projectDir/src/main/jniLibs")
+
+// Optional real release key. CI decodes a keystore and exports these variables;
+// without them the release build keeps the committed debug key so local builds
+// still install over each other. All four must be present, or signing would
+// fail halfway through the build.
+def releaseStore = System.getenv('DRIFT_KEYSTORE')
+def releaseAlias = System.getenv('DRIFT_KEY_ALIAS')
+def releaseStorePass = System.getenv('DRIFT_KEYSTORE_PASSWORD')
+def releaseKeyPass = System.getenv('DRIFT_KEY_PASSWORD')
+def hasReleaseKey = [releaseStore, releaseAlias, releaseStorePass, releaseKeyPass]
+    .every { it != null && !it.trim().isEmpty() }
 
 // The Rust core is always built in release mode (a debug build of the canvas
 // logic is too slow to judge gestures by). Needs cargo-ndk and an NDK r28+
@@ -49,13 +60,22 @@ android {
             keyAlias 'driftru'
             keyPassword 'driftru'
         }
+        if (hasReleaseKey) {
+            release {
+                storeFile file(releaseStore)
+                storePassword releaseStorePass
+                keyAlias releaseAlias
+                keyPassword releaseKeyPass
+            }
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            // Signed with the debug key so the release APK installs without a keystore.
-            signingConfig signingConfigs.debug
+            // A real key when CI has one; otherwise the debug key (still not
+            // debuggable, because this is the release build type).
+            signingConfig hasReleaseKey ? signingConfigs.release : signingConfigs.debug
         }
     }
 

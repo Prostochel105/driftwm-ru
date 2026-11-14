@@ -746,6 +746,13 @@ impl Launcher {
         self.dock.folder_at(slot).map(|f| f.name.clone()).unwrap_or_default()
     }
 
+    /// True when any slot from `start` on holds an app or a non-empty folder.
+    /// The settings screen asks this before shrinking the dock, because slots
+    /// that fall off the end are dropped without an undo.
+    pub fn dock_any_from(&self, start: usize) -> bool {
+        (start..self.dock.count()).any(|i| self.dock.item(i).is_some())
+    }
+
     /// Back/Home pressed while already on the launcher.
     pub fn on_home(&mut self) {
         self.select(None);
@@ -970,6 +977,18 @@ mod tests {
         assert!(drain(&mut l).iter().any(|e| matches!(e, Event::Save)));
         l.dock_set_count(3);
         assert!(!drain(&mut l).iter().any(|e| matches!(e, Event::Save)), "no change, no save");
+    }
+
+    #[test]
+    fn dock_any_from_reports_occupied_slots_only() {
+        let mut l = launcher();
+        assert!(!l.dock_any_from(3), "a fresh dock is empty");
+        l.dock.assign(4, "e");
+        assert!(l.dock_any_from(3));
+        assert!(l.dock_any_from(4));
+        assert!(!l.dock_any_from(5));
+        l.dock_remove(4);
+        assert!(!l.dock_any_from(3));
     }
 
     #[test]

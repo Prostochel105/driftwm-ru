@@ -41,11 +41,25 @@ public final class ThumbService extends AccessibilityService {
         String enabled = Settings.Secure.getString(ctx.getContentResolver(),
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         if (enabled == null) return false;
-        String me = new ComponentName(ctx, ThumbService.class).flattenToString();
+        ComponentName me = new ComponentName(ctx, ThumbService.class);
         TextUtils.SimpleStringSplitter split = new TextUtils.SimpleStringSplitter(':');
         split.setString(enabled);
         while (split.hasNext()) {
-            if (me.equalsIgnoreCase(split.next())) return true;
+            String entry = split.next().trim();
+            ComponentName cn = ComponentName.unflattenFromString(entry);
+            if (cn != null) {
+                // Some firmware stores "pkg/.Service" instead of the full name.
+                String cls = cn.getClassName();
+                boolean sameClass = cls.equalsIgnoreCase(me.getClassName())
+                    || (cls.startsWith(".") && (cn.getPackageName() + cls)
+                        .equalsIgnoreCase(me.getClassName()));
+                if (cn.getPackageName().equalsIgnoreCase(me.getPackageName()) && sameClass) {
+                    return true;
+                }
+            } else if (entry.equalsIgnoreCase(me.flattenToString())
+                || entry.equalsIgnoreCase(me.flattenToShortString())) {
+                return true;
+            }
         }
         return false;
     }

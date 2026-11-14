@@ -40,7 +40,7 @@ import java.util.Locale;
  * front (see LauncherActivity.onResume). Reachable only from the "Drift settings" row of the app list.
  */
 public final class SettingsActivity extends Activity {
-    static final String PROJECT_URL = "https://github.com/StepaandAlex69/DriftWM-for-Android";
+    static final String PROJECT_URL = "https://github.com/Prostochel105/driftwm-ru";
     private static final int REQ_IMAGE = 7001;
 
     /** bg, dots, accent for the ready-made themes. */
@@ -246,12 +246,31 @@ public final class SettingsActivity extends Activity {
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(L.t("Dock apps"))
             .setSingleChoiceItems(labels, checked, (dlg, which) -> {
-                Native.setDockCount(which + 3);
+                int next = which + 3;
+                if (next < current && Native.dockAnyFrom(next)) {
+                    dlg.dismiss();
+                    confirmDockShrink(next);
+                    return;
+                }
+                applyDockCount(next);
                 dlg.dismiss();
-                rebuild();
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
+    }
+
+    private void confirmDockShrink(int count) {
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(L.t("Dock apps"))
+            .setMessage(L.t("The apps and folders in the removed slots will be lost. Continue?"))
+            .setPositiveButton(L.t("Remove"), (d, w) -> applyDockCount(count))
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private void applyDockCount(int count) {
+        Native.setDockCount(count);
+        rebuild();
     }
 
     /** How to use the dock and its folders. */

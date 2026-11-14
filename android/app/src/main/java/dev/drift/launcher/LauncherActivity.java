@@ -491,6 +491,9 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
 
     private void showDrawer(int mode, int slot) {
         hideHomePill();
+        // The folder popup sits above the drawer in the view stack and dims the
+        // whole screen; leaving it visible would hide the list being opened.
+        if (folder.isShowing()) folder.hide();
         drawerMode = mode;
         drawerSlot = slot;
         drawer.show(mode, slot);
