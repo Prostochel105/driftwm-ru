@@ -224,6 +224,8 @@ public final class SettingsActivity extends Activity {
         content.addView(caption("One color for cards, dock, buttons, text and the app list."), lp(0, 8));
         content.addView(row("Dock apps", "How many slots the dock shows",
             status(String.valueOf(Native.dockCount()), true), v -> showDockCount()), lp(0, 8));
+        content.addView(row("Folders in the dock", "How to group apps in the dock", null,
+            v -> showFolderHelp()), lp(0, 8));
         content.addView(row("Reset appearance", "Default colors, no picture", null, v ->
             new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                 .setMessage(L.t("Reset colors and remove the background picture?"))
@@ -249,6 +251,39 @@ public final class SettingsActivity extends Activity {
                 rebuild();
             })
             .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    /** How to use the dock and its folders. */
+    private void showFolderHelp() {
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(L.t("Folders in the dock"))
+            .setMessage(L.t(
+                "The dock sits at the bottom of the screen. It has 3 to 8 slots; change the number in"
+                    + " \"Interface\" → \"Dock apps\".\n\n"
+                    + "• Empty slot — tap to choose an app from the list.\n"
+                    + "• Filled slot — tap opens the app, long-press opens its menu.\n"
+                    + "• Reorder — long-press a slot and drag it sideways.\n\n"
+                    + "Folders:\n"
+                    + "• Create — long-press a slot → \"Create folder\". The app stays inside and the folder opens right away.\n"
+                    + "• Add an app — open the folder and tap \"+\", then pick an app from the list.\n"
+                    + "• Open an app in a folder — tap the folder, then tap the app.\n"
+                    + "• Take an app out — open the folder, long-press the app → \"Remove\".\n"
+                    + "• Rename — open the folder and tap its title; or long-press the folder in the dock → \"Rename folder\".\n"
+                    + "• Remove the folder — long-press the folder in the dock → \"Remove from dock\".",
+                "Док находится внизу экрана. В нём от 3 до 8 слотов; число меняется в разделе"
+                    + " «Интерфейс» → «Приложения в доке».\n\n"
+                    + "• Пустой слот — тап, чтобы выбрать приложение из списка.\n"
+                    + "• Занятый слот — тап открывает приложение, долгий тап открывает меню.\n"
+                    + "• Переставить слоты — долгий тап по слоту и перетащите его в сторону.\n\n"
+                    + "Папки:\n"
+                    + "• Создать — долгий тап по слоту → «Создать папку». Приложение останется внутри, и папка сразу откроется.\n"
+                    + "• Добавить приложение — откройте папку и нажмите «+», затем выберите приложение из списка.\n"
+                    + "• Открыть приложение из папки — тап по папке, затем тап по приложению.\n"
+                    + "• Убрать приложение из папки — откройте папку, долгий тап по приложению → «Удалить».\n"
+                    + "• Переименовать — откройте папку и тапните по названию; или долгий тап по папке в доке → «Переименовать папку».\n"
+                    + "• Убрать папку — долгий тап по папке в доке → «Убрать из дока»."))
+            .setPositiveButton(L.t("Close"), null)
             .show();
     }
 

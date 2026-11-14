@@ -6,8 +6,8 @@ plugins {
 // for the emulator:  ./gradlew assembleDebug -PdriftAbis=arm64-v8a,x86_64
 def abis = (project.findProperty('driftAbis') ?: 'arm64-v8a').toString().split(',').collect { it.trim() }
 // CI passes its run number so every build installs over the previous one.
-def vCode = (project.findProperty('versionCode') ?: '8').toString()
-def vName = (project.findProperty('versionName') ?: 'V5.5').toString()
+def vCode = (project.findProperty('versionCode') ?: '9').toString()
+def vName = (project.findProperty('versionName') ?: 'V5.5.1').toString()
 def rustDir = file("$rootDir/../rust")
 def jniOut = file("$projectDir/src/main/jniLibs")
 

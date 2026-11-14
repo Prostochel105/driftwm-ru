@@ -57,6 +57,8 @@ final class L {
         put("Default colors, no picture", "Цвета по умолчанию, без картинки");
         put("Dock apps", "Приложения в доке");
         put("How many slots the dock shows", "Сколько слотов показывает док");
+        put("Folders in the dock", "Папки в доке");
+        put("How to group apps in the dock", "Как объединять приложения в доке");
         put("Reset colors and remove the background picture?",
             "Сбросить цвета и удалить фоновое изображение?");
         put("Reset", "Сбросить");

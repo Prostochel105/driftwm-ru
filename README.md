@@ -54,9 +54,29 @@ Realme 11 4G, V5.3.
 |---|---|
 | **Theme** | Preview the home screen and apply one of six themes: Graphite, Midnight, Forest, Warm, Light, Rose |
 | **Background** | Colours or your own picture; static wallpaper or an infinite tile attached to the canvas |
-| **Interface** | One accent colour that derives cards, dock, buttons, text and the app list |
+| **Interface** | One accent colour that derives cards, dock, buttons, text and the app list; dock slot count (3–8) and a folders help sheet |
 | **Quick actions** | Accessibility previews (with On/Off status), battery optimisation (with status), diagnostics, app info, gesture reference |
 | **About** | Version, source link, license |
+
+## Dock and folders
+
+The dock sits at the bottom of the screen. It has 3 to 8 slots; change the number under
+**Interface → "Dock apps"**. The value is stored with the layout.
+
+- **Empty slot** — tap to choose an app from the list.
+- **Filled slot** — tap opens the app, long-press opens its menu.
+- **Reorder** — long-press a slot and drag it sideways.
+
+### Folders
+
+- **Create** — long-press a slot → **"Create folder"**. The app stays inside and the folder opens right away.
+- **Add an app** — open the folder and tap **"+"**, then pick an app from the list.
+- **Open an app in a folder** — tap the folder, then tap the app.
+- **Take an app out** — open the folder, long-press the app → **"Remove"**.
+- **Rename** — open the folder and tap its title; or long-press the folder in the dock → **"Rename folder"**.
+- **Remove the folder** — long-press the folder in the dock → **"Remove from dock"**.
+
+The same help is available in the app: **Drift settings → Interface → "Folders in the dock"**.
 
 ## Install
 
