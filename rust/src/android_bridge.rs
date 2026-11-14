@@ -405,6 +405,16 @@ pub extern "system" fn Java_dev_drift_launcher_Native_dockCount(_env: JNIEnv, _c
     with(crate::dock::DEFAULT_SLOTS as jint, |b| b.launcher.dock.count() as jint)
 }
 
+/// Whether any slot from `start` on is occupied; used to confirm a shrink.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_drift_launcher_Native_dockAnyFrom(
+    _env: JNIEnv,
+    _c: JClass,
+    start: jint,
+) -> jboolean {
+    with(false, |b| b.launcher.dock_any_from(start.max(0) as usize)) as jboolean
+}
+
 /// Home pressed while the launcher is already showing.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_drift_launcher_Native_onHome(_env: JNIEnv, _c: JClass) {

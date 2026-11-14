@@ -17,12 +17,12 @@ JDK 17+ is required by Gradle/AGP.
 ## Build and install
 
     cd android
-    ./gradlew assembleDebug                 # runs `cargo ndk` for libdrift_core.so first
-    adb install -r app/build/outputs/apk/debug/app-debug.apk
+    ./gradlew assembleRelease               # runs `cargo ndk` for libdrift_core.so first
+    adb install -r app/build/outputs/apk/release/app-release.apk
     # make it the home app (or press Home and choose "Drift"):
     adb shell cmd package set-home-activity dev.drift.launcher/.LauncherActivity
 
-Emulator: `./gradlew assembleDebug -PdriftAbis=arm64-v8a,x86_64`
+Emulator: `./gradlew assembleRelease -PdriftAbis=arm64-v8a,x86_64`
 
 ## Tests (no Android needed)
 

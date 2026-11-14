@@ -52,6 +52,9 @@ final class Native {
     /** Current dock slot count. */
     static native int dockCount();
 
+    /** True when any slot from {@code start} on holds an app or a folder. */
+    static native boolean dockAnyFrom(int start);
+
     /** Turn the app in a dock slot into a folder with the given (localized) name. */
     static native void dockCreateFolder(int slot, String name);
 

@@ -26,10 +26,12 @@ Based on upstream **V5**. Licensed under **GPL-3.0**, same as the original.
   page in one tap.
 - **Built-in gesture reference.** A Russian help sheet explains tap, double tap, drag, pinch and
   three-finger navigation without leaving the settings screen.
-- **Updates that keep your layout.** The repository contains a fixed debug signing key
-  (`android/app/drift-ru-debug.keystore`), so every APK built here installs **over** the previous
+- **Updates that keep your layout.** Every build is signed with the same key
+  (`android/app/drift-ru-debug.keystore`, or a real release key when CI secrets are configured), and
+  `versionCode` starts at 101 — above the official 7–9 — so a fork build installs **over** the previous
   one. No uninstall, no lost cards.
-- **CI builds.** GitHub Actions builds the APK on every push and uploads it as an artifact.
+- **CI builds and tests.** GitHub Actions runs `cargo test` + `cargo clippy`, builds the release APK on
+  every push, and publishes a GitHub Release when a `v*` tag is pushed.
 
 ## Screenshots
 
@@ -100,7 +102,7 @@ Push to `main`/`master` or run the **build-apk** workflow manually.
 The APK appears in the `drift-ru-apk` artifact.
 
 The workflow installs JDK 17, Android SDK 36, NDK r28 and Rust with the
-`aarch64-linux-android` target, then runs `./gradlew assembleDebug`.
+`aarch64-linux-android` target, then runs `./gradlew assembleRelease`.
 
 ### Locally (Linux x86_64)
 
@@ -110,15 +112,15 @@ cargo install cargo-ndk --locked
 export ANDROID_HOME=$HOME/Android/Sdk
 export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358
 cd android
-./gradlew assembleDebug
+./gradlew assembleRelease
 ```
 
-APK: `android/app/build/outputs/apk/debug/app-debug.apk`.
+APK: `android/app/build/outputs/apk/release/app-release.apk`.
 
 If the Rust core is already built in `android/app/src/main/jniLibs/arm64-v8a/`, skip cargo-ndk:
 
 ```bash
-./gradlew assembleDebug -PskipRust
+./gradlew assembleRelease -PskipRust
 ```
 
 ## Updating from upstream
@@ -150,11 +152,16 @@ sync-upstream.sh                                 Upstream merge helper
 
 ## Signing
 
-`android/app/drift-ru-debug.keystore` is a **debug** key, not a secret and not suitable for Google
-Play. Keep it: replacing it makes future APKs impossible to install over the current one.
-Alias `driftru`, store and key password `driftru`.
+By default the APK is signed with the **debug** key `android/app/drift-ru-debug.keystore` (alias
+`driftru`, store and key password `driftru`). It is not a secret and not suitable for Google Play.
+Keep it: replacing it makes future APKs impossible to install over the current one.
 
-> **Security note.** Because the key is public, anyone can sign an APK for this package name.
+For a real signature, add four repository secrets: `DRIFT_KEYSTORE_BASE64`, `DRIFT_KEY_ALIAS`,
+`DRIFT_KEYSTORE_PASSWORD`, `DRIFT_KEY_PASSWORD`. The workflow then signs with that key. Switching from
+the debug key to a new one requires one uninstall/reinstall, because Android refuses an update signed
+with a different key.
+
+> **Security note.** Because the fallback key is public, anyone can sign an APK for this package name.
 > Install updates only from this repository's **Releases** page, and treat APKs from other sources
 > as untrusted.
 

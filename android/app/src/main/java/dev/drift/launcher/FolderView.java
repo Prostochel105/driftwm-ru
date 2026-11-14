@@ -2,18 +2,24 @@ package dev.drift.launcher;
 
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
+import android.view.View.MeasureSpec;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Popup for a dock folder: a grid of the apps it holds. Tap an app to open it,
@@ -39,7 +45,10 @@ final class FolderView extends FrameLayout {
     private final LinearLayout card;
     private final TextView title;
     private final GridLayout grid;
-    private final int tileW;
+    private final CappedScrollView scroll;
+    private final Map<String, ImageView> tiles = new HashMap<>();
+    private int cardW;
+    private int tileW;
     private Appearance.Palette pal = Appearance.defaults().pal;
     private Callback callback;
     private int slot = -1;
@@ -55,7 +64,8 @@ final class FolderView extends FrameLayout {
         setOnClickListener(v -> hide()); // tapping the scrim closes it
 
         int p = dp(16);
-        int cardW = Math.min(dp(340), getResources().getDisplayMetrics().widthPixels - dp(32));
+        cardW = Math.max(dp(180),
+            Math.min(dp(340), getResources().getDisplayMetrics().widthPixels - dp(32)));
         tileW = (cardW - 2 * p) / COLUMNS;
 
         card = new LinearLayout(context);
@@ -78,11 +88,17 @@ final class FolderView extends FrameLayout {
         grid = new GridLayout(context);
         grid.setColumnCount(COLUMNS);
         grid.setUseDefaultMargins(false);
-        card.addView(grid);
+        scroll = new CappedScrollView(context);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.addView(grid, new ScrollView.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        card.addView(scroll, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(cardW, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.gravity = Gravity.CENTER;
         addView(card, lp);
+        applyMetrics();
         applyPalette();
     }
 
@@ -111,7 +127,9 @@ final class FolderView extends FrameLayout {
 
     void show(int slot) {
         this.slot = slot;
+        applyMetrics();
         reload();
+        scroll.scrollTo(0, 0);
         setAlpha(0f);
         setVisibility(VISIBLE);
         animate().alpha(1f).setDuration(110).start();
@@ -130,15 +148,22 @@ final class FolderView extends FrameLayout {
         if (isShowing()) reload();
     }
 
-    /** Icons arrived after the popup was built. */
+    /** Icons arrived after the popup was built: fill only the missing tiles. */
     void iconsLoaded() {
-        if (isShowing()) reload();
+        if (!isShowing()) return;
+        for (Map.Entry<String, ImageView> e : tiles.entrySet()) {
+            ImageView iv = e.getValue();
+            if (iv.getDrawable() != null) continue;
+            Bitmap icon = icons.get(e.getKey());
+            if (icon != null) iv.setImageBitmap(icon);
+        }
     }
 
     private void reload() {
         if (slot < 0) return;
         title.setText(Native.folderName(slot));
         grid.removeAllViews();
+        tiles.clear();
         String[] apps = Native.folderApps(slot);
         if (apps == null) apps = new String[0];
         for (String key : apps) grid.addView(appTile(key));
@@ -149,8 +174,12 @@ final class FolderView extends FrameLayout {
         LinearLayout col = tile();
         ImageView iv = new ImageView(getContext());
         Bitmap icon = icons.get(key);
-        if (icon != null) iv.setImageBitmap(icon);
-        col.addView(iv, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        if (icon != null) {
+            iv.setImageBitmap(icon);
+        } else {
+            tiles.put(key, iv);
+        }
+        col.addView(iv, new LinearLayout.LayoutParams(iconSize(), iconSize()));
 
         TextView name = label(repo.label(key));
         col.addView(name, new LinearLayout.LayoutParams(
@@ -178,7 +207,7 @@ final class FolderView extends FrameLayout {
         bg.setCornerRadius(dp(12));
         bg.setStroke(dp(1), pal.stroke);
         plus.setBackground(bg);
-        col.addView(plus, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        col.addView(plus, new LinearLayout.LayoutParams(iconSize(), iconSize()));
 
         col.addView(label(L.t("Add")), new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -217,10 +246,74 @@ final class FolderView extends FrameLayout {
             .setMessage(L.t("Take ") + repo.label(key) + L.t(" out of the folder?"))
             .setPositiveButton(L.t("Remove"), (d, w) -> {
                 Native.dockRemoveFolderApp(slot, key);
-                reload();
+                // The folder stays even when emptied, so the popup stays open on
+                // its free "+" slot; hide it only if the slot is no longer a folder.
+                String name = Native.folderName(slot);
+                if (name == null || name.isEmpty()) {
+                    hide();
+                } else {
+                    reload();
+                }
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
+    }
+
+    /**
+     * Recompute sizes from the current display metrics. The activity keeps its
+     * views across rotation ({@code configChanges}), so a size captured in the
+     * constructor would stay wrong after the screen turns.
+     */
+    private void applyMetrics() {
+        int p = dp(16);
+        int width = Math.max(dp(180),
+            Math.min(dp(340), getResources().getDisplayMetrics().widthPixels - dp(32)));
+        if (width != cardW) {
+            cardW = width;
+            ViewGroup.LayoutParams lp = card.getLayoutParams();
+            if (lp != null) {
+                lp.width = cardW;
+                card.setLayoutParams(lp);
+            }
+        }
+        tileW = (cardW - 2 * p) / COLUMNS;
+        int screenH = getResources().getDisplayMetrics().heightPixels;
+        scroll.setMaxHeight(Math.max(dp(160), (int) (screenH * 0.74f)));
+    }
+
+    @Override protected void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        applyMetrics();
+        if (isShowing()) reload();
+    }
+
+    /**
+     * ScrollView that never measures taller than the popup allows. The card is
+     * centred with a WRAP_CONTENT height, so an uncapped folder with many apps
+     * would push its last row — and the "+" tile — off the screen.
+     */
+    private static final class CappedScrollView extends ScrollView {
+        private int maxHeight = Integer.MAX_VALUE;
+
+        CappedScrollView(Context context) {
+            super(context);
+        }
+
+        void setMaxHeight(int h) {
+            if (h == maxHeight) return;
+            maxHeight = h;
+            requestLayout();
+        }
+
+        @Override protected void onMeasure(int widthSpec, int heightSpec) {
+            int capped = MeasureSpec.makeMeasureSpec(maxHeight, MeasureSpec.AT_MOST);
+            super.onMeasure(widthSpec, capped);
+        }
+    }
+
+    /** Keep the icon inside its tile even in a narrow split-screen window. */
+    private int iconSize() {
+        return Math.min(dp(48), Math.max(dp(24), tileW - dp(8)));
     }
 
     private int dp(float v) {

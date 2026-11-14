@@ -136,6 +136,8 @@ final class L {
         put("Add", "Добавить");
         put("Take ", "Убрать ");
         put(" out of the folder?", " из папки?");
+        put("The apps and folders in the removed slots will be lost. Continue?",
+            "Приложения и папки в удаляемых слотах пропадут. Продолжить?");
         put("Drift crashed. Details (select and copy, or send to the developer):",
             "Drift упал. Подробности (выделите и скопируйте или отправьте разработчику):");
         put("Clear report and retry", "Очистить отчёт и повторить");

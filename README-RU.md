@@ -87,8 +87,11 @@ realme 11 4G, V5.3.
 3. Установите APK из этого репозитория (разрешите установку из неизвестных источников).
 4. Назначьте Drift домашним приложением заново.
 
-Дальше обновления ставятся **поверх** без удаления: в репозитории зафиксирован один и тот же ключ подписи
-(`android/app/drift-ru-debug.keystore`). Раскладка и настройки сохраняются.
+Дальше обновления ставятся **поверх** без удаления: все сборки подписываются одним ключом
+(`android/app/drift-ru-debug.keystore`, пока в CI не настроен отдельный release-ключ), а
+`versionCode` начинается с 101 — выше официальных 7–9, поэтому форк ставится поверх. Раскладка и
+настройки сохраняются. Облачный бэкап Android для приложения отключён (`allowBackup=false`):
+раскладка хранится только на устройстве.
 
 ## Как обновлять
 
@@ -96,7 +99,7 @@ realme 11 4G, V5.3.
 
 1. Сделайте **fork** этого репозитория (или сразу форкните upstream и загрузите сюда эти файлы).
 2. Вкладка **Actions** → workflow **build-apk** → **Run workflow**.
-3. Дождитесь зелёной галочки, скачайте артефакт **drift-ru-apk**, внутри — `app-debug.apk`.
+3. Дождитесь зелёной галочки, скачайте артефакт **drift-ru-apk**, внутри — `app-release.apk`.
 4. Установите APK поверх старого.
 
 Когда выйдет новая версия оригинала:
@@ -131,7 +134,7 @@ git push
 
 ## Ключ подписи
 
-В репозитории лежит **debug-ключ** `android/app/drift-ru-debug.keystore`:
+По умолчанию APK подписывается **debug-ключом** `android/app/drift-ru-debug.keystore`:
 
 - alias: `driftru`, пароль хранилища и ключа: `driftru`.
 - Он не секретный и не годится для Google Play — это личная сборка.
@@ -140,12 +143,18 @@ git push
 - Ключ публичный, поэтому теоретически кто угодно может подписать APK с тем же именем пакета.
   Ставьте обновления только из **Releases** этого репозитория.
 
+Для нормальной подписи задайте в GitHub **Settings → Secrets and variables → Actions** четыре секрета:
+`DRIFT_KEYSTORE_BASE64` (keystore в base64), `DRIFT_KEY_ALIAS`, `DRIFT_KEYSTORE_PASSWORD`,
+`DRIFT_KEY_PASSWORD`. Workflow сам подставит их в сборку. Первый переход с debug-ключа на новый
+требует одной переустановки с потерей раскладки — дальше обновления снова ставятся поверх.
+
 ## Сборка
 
 ### GitHub Actions
 
-Workflow `.github/workflows/build-apk.yml` собирает APK на x86_64-раннере GitHub:
-JDK 17 + Android SDK 36 + NDK + Rust + cargo-ndk. APK лежит в артефакте `drift-ru-apk`.
+Workflow `.github/workflows/build-apk.yml` сначала гоняет `cargo test` и `cargo clippy`, затем
+собирает **release**-APK на x86_64-раннере GitHub: JDK 17 + Android SDK 36 + NDK + Rust + cargo-ndk.
+APK лежит в артефакте `drift-ru-apk`. Пуш тега `v*` дополнительно публикует GitHub Release с APK.
 
 ### Локально (Linux x86_64)
 
@@ -157,16 +166,16 @@ cargo install cargo-ndk --locked
 export ANDROID_HOME=$HOME/Android/Sdk
 export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358
 cd android
-./gradlew assembleDebug
+./gradlew assembleRelease
 ```
 
-APK: `android/app/build/outputs/apk/debug/app-debug.apk`.
+APK: `android/app/build/outputs/apk/release/app-release.apk`.
 
 Если Rust-ядро уже собрано вручную и лежит в `android/app/src/main/jniLibs/arm64-v8a/`,
 сборку Java можно запустить без cargo-ndk:
 
 ```bash
-./gradlew assembleDebug -PskipRust
+./gradlew assembleRelease -PskipRust
 ```
 
 ### Сборка на arm64 (как на телефоне)

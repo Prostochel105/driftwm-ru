@@ -16,7 +16,10 @@ use serde::{Deserialize, Serialize};
 use crate::config::Config;
 use crate::dock::Dock;
 
-pub const VERSION: u32 = 1;
+/// Schema version. Bumped to 2 when dock slots could hold a folder object
+/// instead of a bare app key: a v1 build cannot read that shape, so it must
+/// reject the file as "too new" instead of misparsing it.
+pub const VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CardRecord {
@@ -344,6 +347,28 @@ mod tests {
         fs::write(&p, v.to_string()).unwrap();
         let (_, src) = load(&p);
         assert_eq!(src, LoadSource::Reset);
+    }
+
+    #[test]
+    fn version_one_state_with_app_dock_still_loads() {
+        let d = tmpdir("v1dock");
+        let p = d.join("state.json");
+        // v5.4.2 wrote a dock as bare strings; folders did not exist yet.
+        let json = r#"{"version":1,"camera":{"x":0.0,"y":0.0,"zoom":1.0},
+                       "dock":["com.a",null]}"#;
+        fs::write(&p, json).unwrap();
+        let (s, src) = load(&p);
+        assert_eq!(src, LoadSource::Main);
+        assert_eq!(s.dock.count(), crate::dock::MIN_SLOTS);
+        assert_eq!(s.dock.get(0), Some("com.a"));
+    }
+
+    #[test]
+    fn saves_use_the_current_schema_version() {
+        let json = to_json(&SavedState::empty());
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(VERSION, 2);
+        assert_eq!(v["version"], serde_json::json!(VERSION));
     }
 
     #[test]
