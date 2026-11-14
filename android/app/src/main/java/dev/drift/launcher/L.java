@@ -134,6 +134,8 @@ final class L {
         put("Folder name", "Название папки");
         put("Folder", "Папка");
         put("Add", "Добавить");
+        put("Open", "Открыть");
+        put("Remove from folder", "Убрать из папки");
         put("Take ", "Убрать ");
         put(" out of the folder?", " из папки?");
         put("The apps and folders in the removed slots will be lost. Continue?",

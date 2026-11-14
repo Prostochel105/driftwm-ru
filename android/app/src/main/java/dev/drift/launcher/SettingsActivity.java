@@ -287,8 +287,9 @@ public final class SettingsActivity extends Activity {
                     + "• Create — long-press a slot → \"Create folder\". An app slot keeps its app inside; an empty slot opens an empty folder right away.\n"
                     + "• Add an app — open the folder and tap the free \"+\" slot, then pick an app; another free slot appears beside it.\n"
                     + "• Open an app in a folder — tap the folder, then tap the app.\n"
-                    + "• Reorder inside a folder — long-press an app and drag it onto another tile.\n"
-                    + "• Take an app out — drag the app out of the folder (onto the dimmed area); the folder stays with a free slot.\n"
+                    + "• App menu — long-press an app in a folder: it is highlighted and a menu opens (\"Open\", \"Remove from folder\").\n"
+                    + "• Reorder inside a folder — while holding an app, start moving it: the menu closes and the icon follows your finger; drop it on another tile.\n"
+                    + "• Take an app out — drag the app out of the folder (onto the dimmed area), or long-press it → \"Remove from folder\"; the folder stays with a free slot.\n"
                     + "• Rename — open the folder and tap its title; or long-press the folder in the dock → \"Rename folder\".\n"
                     + "• Remove the folder — long-press the folder in the dock → \"Remove from dock\".",
                 "Док находится внизу экрана. В нём от 3 до 8 слотов; число меняется в разделе"
@@ -300,8 +301,9 @@ public final class SettingsActivity extends Activity {
                     + "• Создать — долгий тап по слоту → «Создать папку». Занятый слот оставит приложение внутри; пустой сразу откроет пустую папку.\n"
                     + "• Добавить приложение — откройте папку и нажмите свободный слот «+», затем выберите приложение; рядом появится ещё один свободный слот.\n"
                     + "• Открыть приложение из папки — тап по папке, затем тап по приложению.\n"
-                    + "• Переставить внутри папки — долгий тап по приложению и перетащите его на другое место.\n"
-                    + "• Убрать приложение из папки — перетащите приложение за пределы папки (на затемнённый фон); папка останется со свободным слотом.\n"
+                    + "• Меню приложения — долгий тап по приложению в папке: оно подсвечивается и открывается меню («Открыть», «Убрать из папки»).\n"
+                    + "• Переставить внутри папки — удерживая приложение, начните двигать: меню исчезнет, иконка полетит за пальцем; отпустите над другим местом.\n"
+                    + "• Убрать приложение из папки — перетащите приложение за пределы папки (на затемнённый фон) или долгий тап → «Убрать из папки»; папка останется со свободным слотом.\n"
                     + "• Переименовать — откройте папку и тапните по названию; или долгий тап по папке в доке → «Переименовать папку».\n"
                     + "• Убрать папку — долгий тап по папке в доке → «Убрать из дока»."))
             .setPositiveButton(L.t("Close"), null)

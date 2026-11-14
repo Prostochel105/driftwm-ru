@@ -10,8 +10,10 @@ import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.view.DragEvent;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.MeasureSpec;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
@@ -24,10 +26,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Popup for a dock folder: a grid of the apps it holds. Tap an app to open it,
- * long-press and drag it onto another tile to reorder, drop it on the scrim
- * (outside the card) to take it out of the folder, tap the title to rename the
- * folder, and tap the "+" tile to add another app through the app list.
+ * Popup for a dock folder: a grid of the apps it holds. Tap an app to open it;
+ * long-press it to highlight it and open its menu ("Open" / "Remove from
+ * folder"); start dragging the held app to dismiss the menu and move it — drop
+ * it on another tile to reorder, or drop it on the scrim to take it out. Tap the
+ * title to rename the folder, and tap the "+" tile to add another app.
  */
 final class FolderView extends FrameLayout {
     interface Callback {
@@ -43,6 +46,7 @@ final class FolderView extends FrameLayout {
     private static final int COLUMNS = 4;
 
     private final float density;
+    private final int touchSlop;
     private final AppRepo repo;
     private final IconCache icons;
     private final LinearLayout card;
@@ -57,16 +61,26 @@ final class FolderView extends FrameLayout {
     private int slot = -1;
     /** Keys currently shown, in order; resolves a drag-out into a removal. */
     private String[] currentApps = new String[0];
+    /** Tile whose long-press menu is open, or -1. */
+    private int menuIndex = -1;
+    private View menuView;
+    private View menuAnchor;
+    private float touchDownX;
+    private float touchDownY;
 
     FolderView(Context context, AppRepo repo, IconCache icons) {
         super(context);
         this.repo = repo;
         this.icons = icons;
         density = context.getResources().getDisplayMetrics().density;
+        touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setVisibility(GONE);
         setClickable(true);
         setBackgroundColor(0xB3000000); // dim the canvas behind the popup
-        setOnClickListener(v -> hide()); // tapping the scrim closes it
+        // A tap on the scrim first closes an open menu; otherwise it closes the folder.
+        setOnClickListener(v -> {
+            if (!dismissMenu()) hide();
+        });
         // Drag a tile onto another to reorder it; drop it on the scrim (outside the
         // card) to take the app out of the folder.
         setOnDragListener(this::onDrag);
@@ -80,6 +94,7 @@ final class FolderView extends FrameLayout {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setClickable(true); // taps inside never reach the scrim
         card.setPadding(p, dp(14), p, dp(16));
+        card.setOnClickListener(v -> dismissMenu()); // tapping the card closes the menu
         // Drops inside the card but not on a tile change nothing (never a removal).
         card.setOnDragListener((v, event) -> {
             switch (event.getAction()) {
@@ -100,6 +115,7 @@ final class FolderView extends FrameLayout {
         title.setEllipsize(TextUtils.TruncateAt.END);
         title.setPadding(dp(4), 0, dp(4), dp(12));
         title.setOnClickListener(v -> {
+            dismissMenu();
             if (callback != null && slot >= 0) callback.onRename(slot, title.getText().toString());
         });
         card.addView(title, new LinearLayout.LayoutParams(
@@ -157,6 +173,7 @@ final class FolderView extends FrameLayout {
 
     void hide() {
         if (!isShowing()) return;
+        dismissMenu();
         animate().cancel();
         setVisibility(GONE);
         setAlpha(1f);
@@ -181,6 +198,7 @@ final class FolderView extends FrameLayout {
 
     private void reload() {
         if (slot < 0) return;
+        dismissMenu();
         title.setText(Native.folderName(slot));
         grid.removeAllViews();
         tiles.clear();
@@ -207,14 +225,38 @@ final class FolderView extends FrameLayout {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         col.setOnClickListener(v -> {
+            dismissMenu();
             if (callback != null) callback.onLaunch(key);
         });
-        // Long-press starts a drag: drop it on another tile to reorder, or drop it
-        // outside the card (on the scrim) to take the app out of the folder.
+        // Long-press selects the tile and opens its menu. If the finger then moves,
+        // the menu closes and the tile is dragged (reorder, or drop on the scrim to
+        // take the app out).
         col.setOnLongClickListener(v -> {
-            ClipData data = ClipData.newPlainText("drift-folder-app", key);
-            v.startDragAndDrop(data, new View.DragShadowBuilder(v), index, 0);
+            showAppMenu(index, v, key);
             return true;
+        });
+        col.setOnTouchListener((v, e) -> {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    touchDownX = e.getRawX();
+                    touchDownY = e.getRawY();
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (menuIndex == index && menuView != null) {
+                        float dx = e.getRawX() - touchDownX;
+                        float dy = e.getRawY() - touchDownY;
+                        if (dx * dx + dy * dy > (float) touchSlop * touchSlop) {
+                            dismissMenu();
+                            v.startDragAndDrop(
+                                ClipData.newPlainText("drift-folder-app", key),
+                                new View.DragShadowBuilder(v), index, 0);
+                        }
+                    }
+                    break;
+                default:
+                    break;
+            }
+            return false;
         });
         col.setOnDragListener((v, event) -> {
             switch (event.getAction()) {
@@ -265,6 +307,7 @@ final class FolderView extends FrameLayout {
         col.addView(label(L.t("Add")), new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         col.setOnClickListener(v -> {
+            dismissMenu();
             if (callback != null && slot >= 0) callback.onAdd(slot);
         });
         return col;
@@ -292,6 +335,94 @@ final class FolderView extends FrameLayout {
         t.setEllipsize(TextUtils.TruncateAt.END);
         t.setGravity(Gravity.CENTER);
         return t;
+    }
+
+    /** Highlight a tile and pop its menu just above it (below if there is no room). */
+    private void showAppMenu(int index, View anchor, String key) {
+        dismissMenu();
+        menuIndex = index;
+        menuAnchor = anchor;
+        select(anchor, true);
+        // Hold the gesture: without this the ScrollView would steal the move and
+        // start a scroll instead of the drag.
+        anchor.getParent().requestDisallowInterceptTouchEvent(true);
+
+        LinearLayout box = new LinearLayout(getContext());
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setClickable(true);
+        box.setElevation(dp(8));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(pal.card);
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(1), pal.stroke);
+        box.setBackground(bg);
+        int pad = dp(4);
+        box.setPadding(pad, pad, pad, pad);
+        box.addView(menuItem(L.t("Open"), () -> {
+            dismissMenu();
+            if (callback != null) callback.onLaunch(key);
+        }));
+        box.addView(menuItem(L.t("Remove from folder"), () -> {
+            dismissMenu();
+            confirmRemove(key);
+        }));
+
+        box.measure(MeasureSpec.makeMeasureSpec(cardW, MeasureSpec.AT_MOST),
+            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+        int mw = box.getMeasuredWidth();
+        int mh = box.getMeasuredHeight();
+
+        int[] a = new int[2];
+        anchor.getLocationInWindow(a);
+        int[] r = new int[2];
+        getLocationInWindow(r);
+        int ax = a[0] - r[0];
+        int ay = a[1] - r[1];
+        int x = ax + anchor.getWidth() / 2 - mw / 2;
+        int y = ay - mh - dp(6);
+        if (y < dp(4)) y = ay + anchor.getHeight() + dp(6);
+        x = Math.max(dp(4), Math.min(x, Math.max(dp(4), getWidth() - mw - dp(4))));
+
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.leftMargin = x;
+        lp.topMargin = y;
+        addView(box, lp);
+        menuView = box;
+    }
+
+    private TextView menuItem(String text, Runnable action) {
+        TextView t = new TextView(getContext());
+        t.setText(text);
+        t.setTextSize(14);
+        t.setTextColor(pal.text);
+        t.setPadding(dp(16), dp(10), dp(16), dp(10));
+        t.setClickable(true);
+        t.setOnClickListener(v -> action.run());
+        return t;
+    }
+
+    /** Remove the open menu, if any. Returns whether one was open. */
+    private boolean dismissMenu() {
+        if (menuView == null) return false;
+        removeView(menuView);
+        menuView = null;
+        if (menuAnchor != null) select(menuAnchor, false);
+        menuAnchor = null;
+        menuIndex = -1;
+        return true;
+    }
+
+    private void select(View v, boolean on) {
+        if (!on) {
+            v.setBackground(null);
+            return;
+        }
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(pal.cardDrag);
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(2), pal.accent);
+        v.setBackground(bg);
     }
 
     /** Scrim drop target: a tile dropped outside the card leaves the folder. */
