@@ -1,12 +1,14 @@
 package dev.drift.launcher;
 
 import android.app.AlertDialog;
+import android.content.ClipData;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
+import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.View;
 import android.view.View.MeasureSpec;
@@ -23,8 +25,9 @@ import java.util.Map;
 
 /**
  * Popup for a dock folder: a grid of the apps it holds. Tap an app to open it,
- * long-press to take it out of the folder, tap the title to rename the folder,
- * and tap the "+" tile to add another app through the app list.
+ * long-press and drag it onto another tile to reorder, drop it on the scrim
+ * (outside the card) to take it out of the folder, tap the title to rename the
+ * folder, and tap the "+" tile to add another app through the app list.
  */
 final class FolderView extends FrameLayout {
     interface Callback {
@@ -52,6 +55,8 @@ final class FolderView extends FrameLayout {
     private Appearance.Palette pal = Appearance.defaults().pal;
     private Callback callback;
     private int slot = -1;
+    /** Keys currently shown, in order; resolves a drag-out into a removal. */
+    private String[] currentApps = new String[0];
 
     FolderView(Context context, AppRepo repo, IconCache icons) {
         super(context);
@@ -62,6 +67,9 @@ final class FolderView extends FrameLayout {
         setClickable(true);
         setBackgroundColor(0xB3000000); // dim the canvas behind the popup
         setOnClickListener(v -> hide()); // tapping the scrim closes it
+        // Drag a tile onto another to reorder it; drop it on the scrim (outside the
+        // card) to take the app out of the folder.
+        setOnDragListener(this::onDrag);
 
         int p = dp(16);
         cardW = Math.max(dp(180),
@@ -72,6 +80,18 @@ final class FolderView extends FrameLayout {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setClickable(true); // taps inside never reach the scrim
         card.setPadding(p, dp(14), p, dp(16));
+        // Drops inside the card but not on a tile change nothing (never a removal).
+        card.setOnDragListener((v, event) -> {
+            switch (event.getAction()) {
+                case DragEvent.ACTION_DRAG_STARTED:
+                    return event.getLocalState() instanceof Integer;
+                case DragEvent.ACTION_DROP:
+                case DragEvent.ACTION_DRAG_ENDED:
+                    return true;
+                default:
+                    return false;
+            }
+        });
 
         title = new TextView(context);
         title.setTextSize(17);
@@ -166,11 +186,12 @@ final class FolderView extends FrameLayout {
         tiles.clear();
         String[] apps = Native.folderApps(slot);
         if (apps == null) apps = new String[0];
-        for (String key : apps) grid.addView(appTile(key));
+        currentApps = apps;
+        for (int i = 0; i < apps.length; i++) grid.addView(appTile(apps[i], i));
         grid.addView(addTile());
     }
 
-    private View appTile(String key) {
+    private View appTile(String key, int index) {
         LinearLayout col = tile();
         ImageView iv = new ImageView(getContext());
         Bitmap icon = icons.get(key);
@@ -188,9 +209,41 @@ final class FolderView extends FrameLayout {
         col.setOnClickListener(v -> {
             if (callback != null) callback.onLaunch(key);
         });
+        // Long-press starts a drag: drop it on another tile to reorder, or drop it
+        // outside the card (on the scrim) to take the app out of the folder.
         col.setOnLongClickListener(v -> {
-            confirmRemove(key);
+            ClipData data = ClipData.newPlainText("drift-folder-app", key);
+            v.startDragAndDrop(data, new View.DragShadowBuilder(v), index, 0);
             return true;
+        });
+        col.setOnDragListener((v, event) -> {
+            switch (event.getAction()) {
+                case DragEvent.ACTION_DRAG_STARTED:
+                    return event.getLocalState() instanceof Integer;
+                case DragEvent.ACTION_DRAG_ENTERED:
+                    v.setAlpha(0.55f);
+                    return true;
+                case DragEvent.ACTION_DRAG_EXITED:
+                    v.setAlpha(1f);
+                    return true;
+                case DragEvent.ACTION_DROP: {
+                    v.setAlpha(1f);
+                    Object ls = event.getLocalState();
+                    if (ls instanceof Integer) {
+                        int from = (Integer) ls;
+                        if (from != index) {
+                            Native.folderMove(slot, from, index);
+                            reload();
+                        }
+                    }
+                    return true;
+                }
+                case DragEvent.ACTION_DRAG_ENDED:
+                    v.setAlpha(1f);
+                    return true;
+                default:
+                    return false;
+            }
         });
         return col;
     }
@@ -239,6 +292,24 @@ final class FolderView extends FrameLayout {
         t.setEllipsize(TextUtils.TruncateAt.END);
         t.setGravity(Gravity.CENTER);
         return t;
+    }
+
+    /** Scrim drop target: a tile dropped outside the card leaves the folder. */
+    private boolean onDrag(View v, DragEvent event) {
+        switch (event.getAction()) {
+            case DragEvent.ACTION_DRAG_STARTED:
+                return event.getLocalState() instanceof Integer;
+            case DragEvent.ACTION_DROP: {
+                Object ls = event.getLocalState();
+                if (ls instanceof Integer) {
+                    int from = (Integer) ls;
+                    if (from >= 0 && from < currentApps.length) confirmRemove(currentApps[from]);
+                }
+                return true;
+            }
+            default:
+                return false;
+        }
     }
 
     private void confirmRemove(String key) {

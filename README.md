@@ -74,7 +74,8 @@ The dock sits at the bottom of the screen. It has 3 to 8 slots; change the numbe
 - **Create** — long-press a slot → **"Create folder"**. An app slot keeps its app inside; an empty slot opens an empty folder right away.
 - **Add an app** — open the folder and tap the free **"+"** slot, then pick an app; another free slot appears beside it.
 - **Open an app in a folder** — tap the folder, then tap the app.
-- **Take an app out** — open the folder, long-press the app → **"Remove"**. The folder stays with a free slot.
+- **Reorder inside a folder** — long-press an app and drag it onto another tile.
+- **Take an app out** — drag the app out of the folder (onto the dimmed area); the folder stays with a free slot.
 - **Rename** — open the folder and tap its title; or long-press the folder in the dock → **"Rename folder"**.
 - **Remove the folder** — long-press the folder in the dock → **"Remove from dock"**.
 

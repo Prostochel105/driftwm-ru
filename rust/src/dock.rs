@@ -253,6 +253,22 @@ impl Dock {
         }
     }
 
+    /// Drag-reorder inside the folder in `slot`: move the app at `from` to `to`,
+    /// shifting the ones between. False when the slot is not a folder, an index is
+    /// out of range, or nothing would change.
+    pub fn move_in_folder(&mut self, slot: usize, from: usize, to: usize) -> bool {
+        let Some(Some(DockItem::Folder(f))) = self.slots.get_mut(slot) else {
+            return false;
+        };
+        let n = f.apps.len();
+        if from >= n || to >= n || from == to {
+            return false;
+        }
+        let key = f.apps.remove(from);
+        f.apps.insert(to, key);
+        true
+    }
+
     pub fn rename_folder(&mut self, slot: usize, name: &str) -> bool {
         match self.slots.get_mut(slot) {
             Some(Some(DockItem::Folder(f))) => {
@@ -467,6 +483,23 @@ mod tests {
         assert_eq!(f.name, "New");
         assert!(f.apps.is_empty());
         assert_eq!(d.first_empty(), Some(0), "the folder occupies its slot");
+    }
+
+    #[test]
+    fn move_in_folder_reorders() {
+        let mut d = Dock::new();
+        d.assign(0, "a");
+        d.make_folder(0, "F");
+        d.move_to_folder(0, "b");
+        d.move_to_folder(0, "c");
+        assert_eq!(d.folder_at(0).unwrap().apps, vec!["a", "b", "c"]);
+        assert!(d.move_in_folder(0, 2, 0));
+        assert_eq!(d.folder_at(0).unwrap().apps, vec!["c", "a", "b"]);
+        assert!(d.move_in_folder(0, 0, 2));
+        assert_eq!(d.folder_at(0).unwrap().apps, vec!["a", "b", "c"]);
+        assert!(!d.move_in_folder(0, 1, 1), "same index is a no-op");
+        assert!(!d.move_in_folder(0, 9, 0), "out of range is a no-op");
+        assert!(!d.move_in_folder(4, 0, 1), "an empty slot is not a folder");
     }
 
     #[test]

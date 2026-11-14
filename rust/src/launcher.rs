@@ -748,6 +748,14 @@ impl Launcher {
         }
     }
 
+    /// Drag-reorder inside an open folder popup: move the app at `from` to `to`.
+    pub fn folder_move(&mut self, slot: usize, from: usize, to: usize) {
+        if self.dock.move_in_folder(slot, from, to) {
+            self.bump_layout();
+            self.emit(Event::Save);
+        }
+    }
+
     /// Apps inside a dock folder, for the folder popup.
     pub fn folder_apps(&self, slot: usize) -> Vec<String> {
         self.dock.folder_at(slot).map(|f| f.apps.clone()).unwrap_or_default()
@@ -1059,6 +1067,24 @@ mod tests {
         // ...and the pending pick really lands in the folder.
         l.drawer_pick("b");
         assert_eq!(l.folder_apps(1), vec!["b"]);
+    }
+
+    #[test]
+    fn folder_move_reorders_and_saves() {
+        let mut l = launcher();
+        l.dock.assign(1, "a");
+        l.dock_create_folder(1, "Games");
+        l.open_drawer(DrawerMode::Folder(1));
+        l.drawer_pick("b");
+        l.open_drawer(DrawerMode::Folder(1));
+        l.drawer_pick("c");
+        assert_eq!(l.folder_apps(1), vec!["a", "b", "c"]);
+        drain(&mut l);
+        l.folder_move(1, 2, 0);
+        assert_eq!(l.folder_apps(1), vec!["c", "a", "b"]);
+        assert!(drain(&mut l).iter().any(|e| matches!(e, Event::Save)));
+        l.folder_move(1, 0, 0);
+        assert_eq!(l.folder_apps(1), vec!["c", "a", "b"], "same index is a no-op");
     }
 
     #[test]

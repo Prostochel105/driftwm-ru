@@ -63,6 +63,9 @@ final class Native {
     /** Remove one app from a dock folder. */
     static native void dockRemoveFolderApp(int slot, String key);
 
+    /** Drag-reorder: move the app at {@code from} to {@code to} inside the folder. */
+    static native void folderMove(int slot, int from, int to);
+
     /** App keys inside a dock folder, in order. */
     static native String[] folderApps(int slot);
 

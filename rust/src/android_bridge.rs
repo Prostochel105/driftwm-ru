@@ -399,6 +399,21 @@ pub extern "system" fn Java_dev_drift_launcher_Native_folderName(
     env.new_string(name).map_or(std::ptr::null_mut(), |j| j.into_raw())
 }
 
+/// Drag-reorder inside the folder in `slot`: move the app at `from` to `to`.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_drift_launcher_Native_folderMove(
+    _env: JNIEnv,
+    _c: JClass,
+    slot: jint,
+    from: jint,
+    to: jint,
+) {
+    with((), |b| {
+        b.launcher
+            .folder_move(slot.max(0) as usize, from.max(0) as usize, to.max(0) as usize)
+    });
+}
+
 /// Current dock slot count, for the settings screen.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_drift_launcher_Native_dockCount(_env: JNIEnv, _c: JClass) -> jint {
