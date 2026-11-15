@@ -15,6 +15,24 @@ Based on upstream **V5**. Licensed under **GPL-3.0**, same as the original.
 
 > Русская версия описания: [README-RU.md](README-RU.md)
 
+## Download
+
+[![license](https://img.shields.io/github/license/Prostochel105/driftwm-ru)](LICENSE)
+![platform](https://img.shields.io/badge/platform-arm64--v8a-informational)
+![android](https://img.shields.io/badge/Android-11%2B-informational)
+
+**[⬇ Download the latest APK](https://github.com/Prostochel105/driftwm-ru/releases/latest)** — always the newest build.
+
+| | |
+|---|---|
+| Requirements | Android 11+ (API 30), **arm64-v8a** |
+| Package | `dev.drift.launcher` |
+| Signature | `CN=Drift RU Debug` — one key for every build |
+| Updates | install **over** the previous build; the layout is kept |
+| License | GPL-3.0 |
+
+The original Drift is signed with a different key, so this APK **won't install over it** — remove it once first. See [Install](#install) below.
+
 ## What this fork adds
 
 - **Full Russian UI.** The language follows the system locale: Russian on a Russian phone,

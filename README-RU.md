@@ -13,6 +13,24 @@
 
 > English version: [README.md](README.md)
 
+## Скачать
+
+[![license](https://img.shields.io/github/license/Prostochel105/driftwm-ru)](LICENSE)
+![platform](https://img.shields.io/badge/platform-arm64--v8a-informational)
+![android](https://img.shields.io/badge/Android-11%2B-informational)
+
+**[⬇ Скачать последний APK](https://github.com/Prostochel105/driftwm-ru/releases/latest)** — всегда свежая версия.
+
+| | |
+|---|---|
+| Требования | Android 11+ (API 30), **arm64-v8a** |
+| Пакет | `dev.drift.launcher` |
+| Подпись | `CN=Drift RU Debug` — один ключ для всех сборок |
+| Обновления | ставятся **поверх** без удаления и потери раскладки |
+| Лицензия | GPL-3.0 |
+
+Оригинальный Drift подписан другим ключом, поэтому поверх него этот APK **не встанет** — удалите его один раз. Пошаговая инструкция — в разделе [«Установка (первый раз)»](#установка-первый-раз).
+
 ## Что переведено
 
 - Экран «Настройки Drift»: фон, цвета, картинка, интерфейс, сброс.
