@@ -84,6 +84,10 @@ final class FolderView extends FrameLayout {
     private View menuView;
     private View menuAnchor;
     private View dragSource;
+    /** Current position of the dragged app; updated after every live reorder. */
+    private int dragCurrentIndex = -1;
+    /** Accent divider that slides to the insertion slot while dragging. */
+    private final View dropIndicator;
     private boolean hidePending;
     private float touchDownX;
     private float touchDownY;
@@ -154,6 +158,20 @@ final class FolderView extends FrameLayout {
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(cardW, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.gravity = Gravity.CENTER;
         addView(card, lp);
+
+        // Android-style insertion divider: a thin accent bar that glides to the
+        // gap where the dragged app will land. Hidden until a drag starts.
+        dropIndicator = new View(context);
+        GradientDrawable indBg = new GradientDrawable();
+        indBg.setColor(pal.accent);
+        indBg.setCornerRadius(dp(2));
+        dropIndicator.setBackground(indBg);
+        FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(dp(3), dp(42));
+        ilp.gravity = Gravity.TOP | Gravity.START;
+        addView(dropIndicator, ilp);
+        dropIndicator.setVisibility(INVISIBLE);
+        dropIndicator.setAlpha(0f);
+
         applyMetrics();
         applyPalette();
     }
@@ -171,6 +189,9 @@ final class FolderView extends FrameLayout {
         bg.setStroke(dp(1), pal.stroke);
         card.setBackground(bg);
         title.setTextColor(pal.text);
+        if (dropIndicator != null && dropIndicator.getBackground() instanceof GradientDrawable) {
+            ((GradientDrawable) dropIndicator.getBackground()).setColor(pal.accent);
+        }
     }
 
     void setCallback(Callback c) {
@@ -187,6 +208,8 @@ final class FolderView extends FrameLayout {
         reload();
         scroll.scrollTo(0, 0);
         hidePending = false;
+        dragCurrentIndex = -1;
+        hideDropIndicator();
         animate().cancel();
         setAlpha(0f);
         setScaleX(0.94f);
@@ -200,6 +223,7 @@ final class FolderView extends FrameLayout {
         if (!isShowing() || hidePending) return;
         hidePending = true;
         dismissMenu();
+        hideDropIndicator();
         animate().cancel();
         animate().alpha(0f).scaleX(0.96f).scaleY(0.96f).setDuration(130)
             .withEndAction(() -> {
@@ -309,6 +333,7 @@ final class FolderView extends FrameLayout {
                         if (dx * dx + dy * dy > (float) touchSlop * touchSlop) {
                             dismissMenu();
                             dragSource = v;
+                            dragCurrentIndex = indexOfKey(key);
                             // The source becomes a ghost while the lifted copy follows the finger.
                             v.animate().alpha(0.35f).scaleX(0.92f).scaleY(0.92f)
                                 .setDuration(120).setInterpolator(easeOut).start();
@@ -330,26 +355,23 @@ final class FolderView extends FrameLayout {
                 case DragEvent.ACTION_DRAG_STARTED:
                     return event.getLocalState() instanceof Integer;
                 case DragEvent.ACTION_DRAG_ENTERED:
-                    v.animate().alpha(0.5f).scaleX(0.94f).scaleY(0.94f)
-                        .setDuration(120).setInterpolator(easeOut).start();
+                    // Live reorder: move the app under the finger into this slot
+                    // immediately and animate everybody into their new places.
+                    if (index >= 0 && index != dragCurrentIndex && dragCurrentIndex >= 0) {
+                        reorderWithAnimation(dragCurrentIndex, index);
+                        dragCurrentIndex = index;
+                    }
+                    showDropIndicator(v, index);
+                    return true;
+                case DragEvent.ACTION_DRAG_LOCATION:
+                    showDropIndicator(v, index);
                     return true;
                 case DragEvent.ACTION_DRAG_EXITED:
-                    v.animate().alpha(1f).scaleX(1f).scaleY(1f)
-                        .setDuration(140).setInterpolator(easeOut).start();
                     return true;
-                case DragEvent.ACTION_DROP: {
-                    v.animate().alpha(1f).scaleX(1f).scaleY(1f)
-                        .setDuration(140).setInterpolator(easeOut).start();
-                    Object ls = event.getLocalState();
-                    if (ls instanceof Integer) {
-                        int from = (Integer) ls;
-                        if (from >= 0 && from != index) reorderWithAnimation(from, index);
-                    }
+                case DragEvent.ACTION_DROP:
+                    // The order was already applied during DRAG_ENTERED; just clean up.
                     return true;
-                }
                 case DragEvent.ACTION_DRAG_ENDED:
-                    v.animate().alpha(1f).scaleX(1f).scaleY(1f)
-                        .setDuration(140).setInterpolator(easeOut).start();
                     return true;
                 default:
                     return false;
@@ -365,6 +387,39 @@ final class FolderView extends FrameLayout {
         return -1;
     }
 
+    /** Slide the accent divider to the insertion edge of the hovered slot. */
+    private void showDropIndicator(View anchor, int index) {
+        if (dropIndicator == null || anchor == null) return;
+        int[] a = new int[2];
+        anchor.getLocationInWindow(a);
+        int[] root = new int[2];
+        getLocationInWindow(root);
+        int ax = a[0] - root[0];
+        int ay = a[1] - root[1];
+        // If the dragged app is to the right, show the bar on the left edge of the
+        // target; otherwise on the right edge. This reads as "insert here".
+        boolean fromRight = dragCurrentIndex > index;
+        float x = fromRight ? ax : ax + anchor.getWidth() - dp(3);
+        float y = ay + anchor.getHeight() / 2f - dp(21);
+        if (dropIndicator.getVisibility() != VISIBLE) {
+            dropIndicator.setTranslationX(x);
+            dropIndicator.setTranslationY(y);
+            dropIndicator.setAlpha(0f);
+            dropIndicator.setVisibility(VISIBLE);
+            dropIndicator.animate().alpha(1f).setDuration(120).start();
+        } else {
+            dropIndicator.animate().translationX(x).translationY(y)
+                .setDuration(140).setInterpolator(easeOut).start();
+        }
+    }
+
+    private void hideDropIndicator() {
+        if (dropIndicator == null || dropIndicator.getVisibility() != VISIBLE) return;
+        dropIndicator.animate().cancel();
+        dropIndicator.animate().alpha(0f).setDuration(110)
+            .withEndAction(() -> dropIndicator.setVisibility(INVISIBLE)).start();
+    }
+
     /**
      * Move the app, rebuild the grid reusing the same views, then animate each
      * view from its old position to its new one (FLIP) on the next pre-draw.
@@ -377,6 +432,12 @@ final class FolderView extends FrameLayout {
         }
         Native.folderMove(slot, from, to);
         reload();
+        // reload() resets reused tile alpha to 1 — keep the dragged one a ghost.
+        if (dragSource != null) {
+            dragSource.setAlpha(0.35f);
+            dragSource.setScaleX(0.92f);
+            dragSource.setScaleY(0.92f);
+        }
         grid.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
             @Override public boolean onPreDraw() {
                 grid.getViewTreeObserver().removeOnPreDrawListener(this);
@@ -561,11 +622,13 @@ final class FolderView extends FrameLayout {
                 return true;
             }
             case DragEvent.ACTION_DRAG_ENDED:
+                hideDropIndicator();
                 if (dragSource != null) {
                     dragSource.animate().alpha(1f).scaleX(1f).scaleY(1f)
                         .setDuration(160).setInterpolator(easeOut).start();
                     dragSource = null;
                 }
+                dragCurrentIndex = -1;
                 return true;
             default:
                 return false;
