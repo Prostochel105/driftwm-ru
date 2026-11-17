@@ -20,6 +20,9 @@ final class Perf {
     private static long renderTotalNs;
     private static long renderMaxNs;
     private static long slowFrames;
+    private static long drawFrames;
+    private static long drawTotalNs;
+    private static long drawMaxNs;
     private static boolean firstDrawMarked;
 
     private Perf() {}
@@ -61,6 +64,13 @@ final class Perf {
         if (renderNs > 16_000_000L) slowFrames++;
     }
 
+    /** Time spent in CanvasView.onDraw outside the native display-list copy. */
+    static synchronized void draw(long drawNs) {
+        drawFrames++;
+        drawTotalNs += drawNs;
+        if (drawNs > drawMaxNs) drawMaxNs = drawNs;
+    }
+
     static synchronized String report() {
         StringBuilder sb = new StringBuilder();
         sb.append("activity creates: ").append(creates)
@@ -73,6 +83,14 @@ final class Perf {
                 .append(", avg=").append(String.format(java.util.Locale.ROOT, "%.2f", avg))
                 .append(" ms, max=").append(String.format(java.util.Locale.ROOT, "%.2f", max))
                 .append(" ms, >16 ms=").append(slowFrames).append('\n');
+            if (drawFrames > 0) {
+                sb.append("java draw: frames=").append(drawFrames)
+                    .append(", avg=")
+                    .append(String.format(java.util.Locale.ROOT, "%.2f", drawTotalNs / 1_000_000.0 / drawFrames))
+                    .append(" ms, max=")
+                    .append(String.format(java.util.Locale.ROOT, "%.2f", drawMaxNs / 1_000_000.0))
+                    .append(" ms\n");
+            }
         }
         sb.append("last events:\n");
         for (String line : MARKS) sb.append("  ").append(line).append('\n');

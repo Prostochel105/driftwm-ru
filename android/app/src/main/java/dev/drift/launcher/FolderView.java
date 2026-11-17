@@ -5,9 +5,12 @@ import android.content.ClipData;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Point;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.text.TextUtils;
 import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -15,6 +18,10 @@ import android.view.View;
 import android.view.View.MeasureSpec;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.Interpolator;
+import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.ImageView;
@@ -22,7 +29,9 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -31,6 +40,10 @@ import java.util.Map;
  * folder"); start dragging the held app to dismiss the menu and move it — drop
  * it on another tile to reorder, or drop it on the scrim to take it out. Tap the
  * title to rename the folder, and tap the "+" tile to add another app.
+ *
+ * Drag feedback is animated: the dragged app gets a lifted shadow with an accent
+ * border, the target tiles ease out of the way, and a reorder animates the icons
+ * to their new places (FLIP) instead of snapping the grid into shape.
  */
 final class FolderView extends FrameLayout {
     interface Callback {
@@ -47,13 +60,18 @@ final class FolderView extends FrameLayout {
 
     private final float density;
     private final int touchSlop;
+    private final Interpolator easeOut = new DecelerateInterpolator(1.7f);
+    private final Interpolator pop = new OvershootInterpolator(1.25f);
     private final AppRepo repo;
     private final IconCache icons;
     private final LinearLayout card;
     private final TextView title;
     private final GridLayout grid;
     private final CappedScrollView scroll;
+    /** Tiles waiting on an icon, keyed by app key. */
     private final Map<String, ImageView> tiles = new HashMap<>();
+    /** Tile views by app key, reused across reloads so reorder can animate them. */
+    private final Map<String, View> tileByKey = new HashMap<>();
     private int cardW;
     private int tileW;
     private Appearance.Palette pal = Appearance.defaults().pal;
@@ -65,6 +83,8 @@ final class FolderView extends FrameLayout {
     private int menuIndex = -1;
     private View menuView;
     private View menuAnchor;
+    private View dragSource;
+    private boolean hidePending;
     private float touchDownX;
     private float touchDownY;
 
@@ -112,7 +132,7 @@ final class FolderView extends FrameLayout {
         title.setTextSize(17);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setSingleLine(true);
-        title.setEllipsize(TextUtils.TruncateAt.END);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         title.setPadding(dp(4), 0, dp(4), dp(12));
         title.setOnClickListener(v -> {
             dismissMenu();
@@ -166,18 +186,30 @@ final class FolderView extends FrameLayout {
         applyMetrics();
         reload();
         scroll.scrollTo(0, 0);
+        hidePending = false;
+        animate().cancel();
         setAlpha(0f);
+        setScaleX(0.94f);
+        setScaleY(0.94f);
         setVisibility(VISIBLE);
-        animate().alpha(1f).setDuration(110).start();
+        animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(180)
+            .setInterpolator(pop).start();
     }
 
     void hide() {
-        if (!isShowing()) return;
+        if (!isShowing() || hidePending) return;
+        hidePending = true;
         dismissMenu();
         animate().cancel();
-        setVisibility(GONE);
-        setAlpha(1f);
-        if (callback != null) callback.onClose();
+        animate().alpha(0f).scaleX(0.96f).scaleY(0.96f).setDuration(130)
+            .withEndAction(() -> {
+                setVisibility(GONE);
+                setAlpha(1f);
+                setScaleX(1f);
+                setScaleY(1f);
+                hidePending = false;
+                if (callback != null) callback.onClose();
+            }).start();
     }
 
     /** Folder contents changed underneath the open popup (rename, add, remove). */
@@ -200,17 +232,46 @@ final class FolderView extends FrameLayout {
         if (slot < 0) return;
         dismissMenu();
         title.setText(Native.folderName(slot));
-        grid.removeAllViews();
-        tiles.clear();
         String[] apps = Native.folderApps(slot);
         if (apps == null) apps = new String[0];
         currentApps = apps;
-        for (int i = 0; i < apps.length; i++) grid.addView(appTile(apps[i], i));
+        tiles.clear();
+
+        // Reuse tile views by key: a reorder only changes their order, so the
+        // existing views can be animated to their new positions afterwards.
+        List<View> spare = new ArrayList<>(tileByKey.values());
+        tileByKey.clear();
+        grid.removeAllViews();
+        for (String key : apps) {
+            View tile = null;
+            for (View candidate : spare) {
+                if (key.equals(candidate.getTag())) {
+                    tile = candidate;
+                    spare.remove(candidate);
+                    break;
+                }
+            }
+            if (tile == null) {
+                tile = appTile(key);
+            } else {
+                tile.animate().cancel();
+                tile.setAlpha(1f);
+                tile.setScaleX(1f);
+                tile.setScaleY(1f);
+                tile.setTranslationX(0f);
+                tile.setTranslationY(0f);
+                ImageView iv = (ImageView) ((LinearLayout) tile).getChildAt(0);
+                if (iv.getDrawable() == null) tiles.put(key, iv);
+            }
+            tileByKey.put(key, tile);
+            grid.addView(tile);
+        }
         grid.addView(addTile());
     }
 
-    private View appTile(String key, int index) {
+    private View appTile(String key) {
         LinearLayout col = tile();
+        col.setTag(key); // stable identity across reloads
         ImageView iv = new ImageView(getContext());
         Bitmap icon = icons.get(key);
         if (icon != null) {
@@ -232,7 +293,7 @@ final class FolderView extends FrameLayout {
         // the menu closes and the tile is dragged (reorder, or drop on the scrim to
         // take the app out).
         col.setOnLongClickListener(v -> {
-            showAppMenu(index, v, key);
+            showAppMenu(indexOfKey(key), v, key);
             return true;
         });
         col.setOnTouchListener((v, e) -> {
@@ -242,14 +303,19 @@ final class FolderView extends FrameLayout {
                     touchDownY = e.getRawY();
                     break;
                 case MotionEvent.ACTION_MOVE:
-                    if (menuIndex == index && menuView != null) {
+                    if (menuIndex == indexOfKey(key) && menuView != null) {
                         float dx = e.getRawX() - touchDownX;
                         float dy = e.getRawY() - touchDownY;
                         if (dx * dx + dy * dy > (float) touchSlop * touchSlop) {
                             dismissMenu();
+                            dragSource = v;
+                            // The source becomes a ghost while the lifted copy follows the finger.
+                            v.animate().alpha(0.35f).scaleX(0.92f).scaleY(0.92f)
+                                .setDuration(120).setInterpolator(easeOut).start();
                             v.startDragAndDrop(
                                 ClipData.newPlainText("drift-folder-app", key),
-                                new View.DragShadowBuilder(v), index, 0);
+                                new AppDragShadow(icons.get(key), repo.label(key), pal, density, iconSize()),
+                                indexOfKey(key), 0);
                         }
                     }
                     break;
@@ -259,35 +325,77 @@ final class FolderView extends FrameLayout {
             return false;
         });
         col.setOnDragListener((v, event) -> {
+            int index = indexOfKey(key);
             switch (event.getAction()) {
                 case DragEvent.ACTION_DRAG_STARTED:
                     return event.getLocalState() instanceof Integer;
                 case DragEvent.ACTION_DRAG_ENTERED:
-                    v.setAlpha(0.55f);
+                    v.animate().alpha(0.5f).scaleX(0.94f).scaleY(0.94f)
+                        .setDuration(120).setInterpolator(easeOut).start();
                     return true;
                 case DragEvent.ACTION_DRAG_EXITED:
-                    v.setAlpha(1f);
+                    v.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                        .setDuration(140).setInterpolator(easeOut).start();
                     return true;
                 case DragEvent.ACTION_DROP: {
-                    v.setAlpha(1f);
+                    v.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                        .setDuration(140).setInterpolator(easeOut).start();
                     Object ls = event.getLocalState();
                     if (ls instanceof Integer) {
                         int from = (Integer) ls;
-                        if (from != index) {
-                            Native.folderMove(slot, from, index);
-                            reload();
-                        }
+                        if (from >= 0 && from != index) reorderWithAnimation(from, index);
                     }
                     return true;
                 }
                 case DragEvent.ACTION_DRAG_ENDED:
-                    v.setAlpha(1f);
+                    v.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                        .setDuration(140).setInterpolator(easeOut).start();
                     return true;
                 default:
                     return false;
             }
         });
         return col;
+    }
+
+    private int indexOfKey(String key) {
+        for (int i = 0; i < currentApps.length; i++) {
+            if (key.equals(currentApps[i])) return i;
+        }
+        return -1;
+    }
+
+    /**
+     * Move the app, rebuild the grid reusing the same views, then animate each
+     * view from its old position to its new one (FLIP) on the next pre-draw.
+     */
+    private void reorderWithAnimation(int from, int to) {
+        Map<View, int[]> before = new HashMap<>();
+        for (int i = 0; i < grid.getChildCount(); i++) {
+            View v = grid.getChildAt(i);
+            before.put(v, new int[] {v.getLeft(), v.getTop()});
+        }
+        Native.folderMove(slot, from, to);
+        reload();
+        grid.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                grid.getViewTreeObserver().removeOnPreDrawListener(this);
+                for (int i = 0; i < grid.getChildCount(); i++) {
+                    View v = grid.getChildAt(i);
+                    int[] old = before.get(v);
+                    if (old == null) continue;
+                    float dx = old[0] - v.getLeft();
+                    float dy = old[1] - v.getTop();
+                    if (Math.abs(dx) < 1f && Math.abs(dy) < 1f) continue;
+                    v.setTranslationX(dx);
+                    v.setTranslationY(dy);
+                    v.animate().translationX(0f).translationY(0f)
+                        .setDuration(260).setInterpolator(easeOut).start();
+                }
+                return true;
+            }
+        });
+        grid.invalidate();
     }
 
     private View addTile() {
@@ -332,7 +440,7 @@ final class FolderView extends FrameLayout {
         t.setTextSize(11);
         t.setTextColor(pal.textDim);
         t.setSingleLine(true);
-        t.setEllipsize(TextUtils.TruncateAt.END);
+        t.setEllipsize(android.text.TextUtils.TruncateAt.END);
         t.setGravity(Gravity.CENTER);
         return t;
     }
@@ -343,6 +451,8 @@ final class FolderView extends FrameLayout {
         menuIndex = index;
         menuAnchor = anchor;
         select(anchor, true);
+        anchor.animate().scaleX(1.06f).scaleY(1.06f).setDuration(130)
+            .setInterpolator(pop).start();
         // Hold the gesture: without this the ScrollView would steal the move and
         // start a scroll instead of the drag.
         anchor.getParent().requestDisallowInterceptTouchEvent(true);
@@ -389,6 +499,11 @@ final class FolderView extends FrameLayout {
         lp.topMargin = y;
         addView(box, lp);
         menuView = box;
+        box.setAlpha(0f);
+        box.setScaleX(0.86f);
+        box.setScaleY(0.86f);
+        box.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(170)
+            .setInterpolator(pop).start();
     }
 
     private TextView menuItem(String text, Runnable action) {
@@ -405,9 +520,16 @@ final class FolderView extends FrameLayout {
     /** Remove the open menu, if any. Returns whether one was open. */
     private boolean dismissMenu() {
         if (menuView == null) return false;
-        removeView(menuView);
+        final View box = menuView;
         menuView = null;
-        if (menuAnchor != null) select(menuAnchor, false);
+        box.animate().cancel();
+        box.animate().alpha(0f).scaleX(0.9f).scaleY(0.9f).setDuration(110)
+            .withEndAction(() -> removeView(box)).start();
+        if (menuAnchor != null) {
+            final View a = menuAnchor;
+            a.animate().scaleX(1f).scaleY(1f).setDuration(130).setInterpolator(easeOut).start();
+            select(a, false);
+        }
         menuAnchor = null;
         menuIndex = -1;
         return true;
@@ -438,6 +560,13 @@ final class FolderView extends FrameLayout {
                 }
                 return true;
             }
+            case DragEvent.ACTION_DRAG_ENDED:
+                if (dragSource != null) {
+                    dragSource.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                        .setDuration(160).setInterpolator(easeOut).start();
+                    dragSource = null;
+                }
+                return true;
             default:
                 return false;
         }
@@ -489,6 +618,15 @@ final class FolderView extends FrameLayout {
         if (isShowing()) reload();
     }
 
+    /** Keep the icon inside its tile even in a narrow split-screen window. */
+    private int iconSize() {
+        return Math.min(dp(48), Math.max(dp(24), tileW - dp(8)));
+    }
+
+    private int dp(float v) {
+        return Math.round(v * density);
+    }
+
     /**
      * ScrollView that never measures taller than the popup allows. The card is
      * centred with a WRAP_CONTENT height, so an uncapped folder with many apps
@@ -513,12 +651,72 @@ final class FolderView extends FrameLayout {
         }
     }
 
-    /** Keep the icon inside its tile even in a narrow split-screen window. */
-    private int iconSize() {
-        return Math.min(dp(48), Math.max(dp(24), tileW - dp(8)));
-    }
+    /**
+     * A lifted copy of the app tile that follows the finger during a drag. The
+     * platform's default DragShadowBuilder is a flat bitmap with no depth, which
+     * made reordering feel like a bug; this one scales the icon up, adds a soft
+     * drop shadow and an accent ring, and keeps a short label under it.
+     */
+    private static final class AppDragShadow extends View.DragShadowBuilder {
+        private final Bitmap icon;
+        private final String label;
+        private final Appearance.Palette pal;
+        private final float density;
+        private final int w;
+        private final int h;
+        private final float labelBand;
 
-    private int dp(float v) {
-        return Math.round(v * density);
+        AppDragShadow(Bitmap icon, String label, Appearance.Palette pal, float density, int iconSize) {
+            this.icon = icon;
+            this.label = label == null ? "" : label;
+            this.pal = pal;
+            this.density = density;
+            this.w = Math.round(iconSize * 1.5f) + dp(16);
+            this.labelBand = dp(26);
+            this.h = Math.round(iconSize * 1.5f) + dp(16) + Math.round(labelBand);
+        }
+
+        @Override public void onProvideShadowMetrics(Point shadowSize, Point shadowTouchPoint) {
+            shadowSize.set(w, h);
+            // Keep the icon under the finger, not the label strip.
+            shadowTouchPoint.set(w / 2, (w - dp(16)) / 2 + dp(8));
+        }
+
+        @Override public void onDrawShadow(Canvas canvas) {
+            float pad = dp(8);
+            float rad = dp(16);
+            RectF face = new RectF(pad, pad, w - pad, h - labelBand);
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            // Soft offset shadow, painted rather than blurred so the drag stays smooth.
+            p.setColor(0x66000000);
+            RectF sh = new RectF(face.left + dp(2), face.top + dp(5),
+                face.right + dp(2), face.bottom + dp(5));
+            canvas.drawRoundRect(sh, rad, rad, p);
+            p.setColor(pal.cardDrag);
+            canvas.drawRoundRect(face, rad, rad, p);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(dp(2));
+            p.setColor(pal.accent);
+            canvas.drawRoundRect(face, rad, rad, p);
+
+            if (icon != null) {
+                float s = Math.min(face.width(), face.height()) * 0.64f;
+                float cx = face.centerX();
+                float cy = face.centerY();
+                Paint ip = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+                canvas.drawBitmap(icon, null,
+                    new RectF(cx - s / 2, cy - s / 2, cx + s / 2, cy + s / 2), ip);
+            }
+
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(pal.text);
+            p.setTextSize(dp(12));
+            p.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText(label, w / 2f, h - dp(7), p);
+        }
+
+        private int dp(float v) {
+            return Math.round(v * density);
+        }
     }
 }

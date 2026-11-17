@@ -86,6 +86,8 @@ The dock sits at the bottom of the screen. It has 3 to 8 slots; change the numbe
 - **Empty slot** — tap to choose an app; long-press opens its menu.
 - **Filled slot** — tap opens the app, long-press opens its menu.
 - **Reorder** — long-press a slot and drag it sideways.
+- **Animated feedback** — the dragged app gets a lifted shadow with an accent ring,
+  target tiles ease out of the way, and dropping an app animates it into its new place.
 
 ### Folders
 
@@ -191,7 +193,6 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 ## Limitations
 
-- The Rust core still emits some English toasts; the most common ones are translated in `L.toast`.
 - System Recents (the gesture/overview screen) belong to the firmware and are not replaced by Drift.
 - APKs are built for `arm64-v8a` only.
 

@@ -261,16 +261,14 @@ impl Launcher {
                     self.begin_multi();
                 }
             }
-            3 => {
-                if matches!(self.g.mode, Mode::Multi { .. } | Mode::Pan { .. } | Mode::Pending { .. })
-                    && !matches!(&self.g.mode, Mode::Pending { target, .. } if target.is_control())
-                {
-                    let c = self.centroid(3);
-                    self.g.mode = Mode::Swipe3 {
-                        start: c,
-                        fired: false,
-                    };
-                }
+            3 if matches!(self.g.mode, Mode::Multi { .. } | Mode::Pan { .. } | Mode::Pending { .. })
+                && !matches!(&self.g.mode, Mode::Pending { target, .. } if target.is_control()) =>
+            {
+                let c = self.centroid(3);
+                self.g.mode = Mode::Swipe3 {
+                    start: c,
+                    fired: false,
+                };
             }
             _ => {}
         }

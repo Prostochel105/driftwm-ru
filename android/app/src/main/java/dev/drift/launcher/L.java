@@ -161,6 +161,7 @@ final class L {
             "Док заполнен: долгий тап по слоту, чтобы заменить");
         put("This app is not installed. Long-press the slot to replace it",
             "Приложение не установлено. Долгий тап по слоту, чтобы заменить");
+        put("This app is not available", "Приложение недоступно");
     }
 
     private static void put(String en, String ru) {
