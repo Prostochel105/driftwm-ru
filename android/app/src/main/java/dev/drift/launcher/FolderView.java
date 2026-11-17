@@ -86,6 +86,8 @@ final class FolderView extends FrameLayout {
     private View dragSource;
     /** Current position of the dragged app; updated after every live reorder. */
     private int dragCurrentIndex = -1;
+    /** Slot the divider currently marks, to avoid re-posting on every move event. */
+    private int dropIndicatorIndex = -1;
     /** Accent divider that slides to the insertion slot while dragging. */
     private final View dropIndicator;
     private boolean hidePending;
@@ -159,18 +161,19 @@ final class FolderView extends FrameLayout {
         lp.gravity = Gravity.CENTER;
         addView(card, lp);
 
-        // Android-style insertion divider: a thin accent bar that glides to the
-        // gap where the dragged app will land. Hidden until a drag starts.
+        // Android-style insertion divider: a thin accent bar shown in the gap
+        // between slots. It is positioned from the cell's layout index, never from
+        // its animated position, so it cannot ride a FLIP animation or land on an
+        // icon. Hidden until a drag starts.
         dropIndicator = new View(context);
         GradientDrawable indBg = new GradientDrawable();
         indBg.setColor(pal.accent);
-        indBg.setCornerRadius(dp(2));
+        indBg.setCornerRadius(dp(1.5f));
         dropIndicator.setBackground(indBg);
-        FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(dp(3), dp(42));
+        FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(dp(2.5f), dp(40));
         ilp.gravity = Gravity.TOP | Gravity.START;
         addView(dropIndicator, ilp);
         dropIndicator.setVisibility(INVISIBLE);
-        dropIndicator.setAlpha(0f);
 
         applyMetrics();
         applyPalette();
@@ -361,10 +364,10 @@ final class FolderView extends FrameLayout {
                         reorderWithAnimation(dragCurrentIndex, index);
                         dragCurrentIndex = index;
                     }
-                    showDropIndicator(v, index);
+                    showDropIndicator(index);
                     return true;
                 case DragEvent.ACTION_DRAG_LOCATION:
-                    showDropIndicator(v, index);
+                    showDropIndicator(index);
                     return true;
                 case DragEvent.ACTION_DRAG_EXITED:
                     return true;
@@ -387,36 +390,47 @@ final class FolderView extends FrameLayout {
         return -1;
     }
 
-    /** Slide the accent divider to the insertion edge of the hovered slot. */
-    private void showDropIndicator(View anchor, int index) {
-        if (dropIndicator == null || anchor == null) return;
-        int[] a = new int[2];
-        anchor.getLocationInWindow(a);
-        int[] root = new int[2];
-        getLocationInWindow(root);
-        int ax = a[0] - root[0];
-        int ay = a[1] - root[1];
-        // If the dragged app is to the right, show the bar on the left edge of the
-        // target; otherwise on the right edge. This reads as "insert here".
-        boolean fromRight = dragCurrentIndex > index;
-        float x = fromRight ? ax : ax + anchor.getWidth() - dp(3);
-        float y = ay + anchor.getHeight() / 2f - dp(21);
-        if (dropIndicator.getVisibility() != VISIBLE) {
-            dropIndicator.setTranslationX(x);
-            dropIndicator.setTranslationY(y);
-            dropIndicator.setAlpha(0f);
-            dropIndicator.setVisibility(VISIBLE);
-            dropIndicator.animate().alpha(1f).setDuration(120).start();
-        } else {
-            dropIndicator.animate().translationX(x).translationY(y)
-                .setDuration(140).setInterpolator(easeOut).start();
-        }
+    /**
+     * Show the divider in the gap to the LEFT of the hovered slot. Position comes
+     * from layout coordinates (getLeft/getTop), which ignore FLIP translations, so
+     * the bar is always exactly where the slot actually sits. No slide animation —
+     * it appears/disappears with a short fade to avoid chasing animated icons.
+     */
+    private void showDropIndicator(final int index) {
+        if (dropIndicator == null || index < 0 || index == dropIndicatorIndex) return;
+        dropIndicatorIndex = index;
+        // After a live reorder the grid is rebuilt; wait for the layout pass so
+        // getLeft()/getTop() reflect the new cell positions.
+        grid.post(() -> {
+            if (!isShowing() || dragCurrentIndex < 0 || index >= grid.getChildCount()) return;
+            View cell = grid.getChildAt(index);
+            int x = cell.getLeft();
+            int y = cell.getTop();
+            // Walk up to FolderView; getLeft/getTop ignore translation animations.
+            for (View p = (View) cell.getParent(); p != FolderView.this; p = (View) p.getParent()) {
+                x += p.getLeft();
+                y += p.getTop();
+            }
+            // Sit in the padding gap at the cell's left edge, vertically centred.
+            int barX = x - dp(2);
+            int barY = y + cell.getHeight() / 2 - dp(20);
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) dropIndicator.getLayoutParams();
+            lp.leftMargin = barX;
+            lp.topMargin = barY;
+            dropIndicator.setLayoutParams(lp);
+            if (dropIndicator.getVisibility() != VISIBLE) {
+                dropIndicator.setAlpha(0f);
+                dropIndicator.setVisibility(VISIBLE);
+                dropIndicator.animate().alpha(1f).setDuration(90).start();
+            }
+        });
     }
 
     private void hideDropIndicator() {
+        dropIndicatorIndex = -1;
         if (dropIndicator == null || dropIndicator.getVisibility() != VISIBLE) return;
         dropIndicator.animate().cancel();
-        dropIndicator.animate().alpha(0f).setDuration(110)
+        dropIndicator.animate().alpha(0f).setDuration(90)
             .withEndAction(() -> dropIndicator.setVisibility(INVISIBLE)).start();
     }
 
