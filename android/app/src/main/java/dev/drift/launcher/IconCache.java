@@ -38,6 +38,8 @@ final class IconCache {
     private final ExecutorService worker = Workers.fixed("drift-icons", 2);
     private final Set<String> pending = new HashSet<>();
     private final Set<String> failed = new HashSet<>();
+    /** Keys whose disk icon was missing before the app list arrived; retried on resume. */
+    private final Set<String> deferred = new HashSet<>();
     private final AtomicInteger diskWrites = new AtomicInteger();
     private boolean notifyQueued;
     private Listener listener;
@@ -62,9 +64,11 @@ final class IconCache {
     Bitmap get(String key) {
         if (key == null) return null;
         Bitmap b = cache.get(key);
-        // On a cold start the cards are drawn before the app list is ready.
-        // Asking for icons then can only fail, so wait for the first list.
-        if (b == null && !repo.isLoaded()) return null;
+        if (b == null && deferred.contains(key)) return null;
+        // On a cold start the cards are drawn before the app list is ready. If a
+        // previous run persisted the package's update time, the disk file name is
+        // already known and the icon can load in parallel with the list query.
+        if (b == null && !repo.isLoaded() && repo.cachedIconVersion(key) == 0) return null;
         // An icon can fail while the app list is still loading, or while a package
         // is being updated. Once the app is back in the list, retry instead of
         // keeping a black placeholder forever.
@@ -73,20 +77,28 @@ final class IconCache {
         }
         if (b == null && !failed.contains(key) && pending.add(key)) {
             worker.execute(() -> {
-                Bitmap loaded = loadFromDisk(key);
-                if (loaded == null) {
+                long version = repo.iconVersion(key);
+                Bitmap loaded = loadFromDisk(key, version);
+                if (loaded == null && repo.isLoaded()) {
                     loaded = repo.renderIcon(key, sizePx);
-                    if (loaded != null) saveToDisk(key, loaded);
+                    // Never write under version 0: that file could never be found again.
+                    if (loaded != null && version > 0) saveToDisk(key, loaded, version);
                 }
                 final Bitmap result = loaded;
+                final long loadedVersion = version;
                 main.post(() -> {
                     pending.remove(key);
-                    if (result != null) {
-                        cache.put(key, result);
+                    long current = repo.cachedIconVersion(key);
+                    if (result == null) {
+                        // Missing before the app list arrived is not a failure: wait
+                        // for the list, otherwise every frame would retry the worker.
+                        if (!repo.isLoaded()) deferred.add(key);
+                        else failed.add(key);
+                    } else if (loadedVersion > 0 && current > 0 && current != loadedVersion) {
+                        // The app was updated while this icon was loading. Leave the
+                        // stale bitmap out; the next draw requests the new version.
                     } else {
-                        // Do not retry every frame for genuinely missing apps;
-                        // get() clears this once the key appears in the app list.
-                        failed.add(key);
+                        cache.put(key, result);
                     }
                     queueNotify();
                 });
@@ -98,24 +110,30 @@ final class IconCache {
     /** Retry icons of installed apps that failed earlier (app list changed or resumed). */
     void retry() {
         failed.removeIf(repo::has);
+        deferred.clear();
     }
 
-    /** Forget everything (an app was updated and its icon may differ). */
-    void clear() {
-        cache.evictAll();
-        failed.clear();
+    /** Drops cached icons of packages whose update time changed. Main thread only. */
+    void invalidate(Set<String> packages) {
+        if (packages == null || packages.isEmpty()) return;
+        for (String key : cache.snapshot().keySet()) {
+            if (packages.contains(ThumbStore.packageOf(key))) cache.remove(key);
+        }
+        failed.removeIf(key -> packages.contains(ThumbStore.packageOf(key)));
+        deferred.removeIf(key -> packages.contains(ThumbStore.packageOf(key)));
     }
 
     // ---- disk cache (worker threads only) -------------------------------------
 
-    private File fileFor(String key) {
-        String name = sha1(key + ':' + sizePx + ':' + repo.iconVersion(key));
+    private File fileFor(String key, long version) {
+        String name = sha1(key + ':' + sizePx + ':' + version);
         if (name == null) name = Integer.toHexString((key + sizePx).hashCode());
         return new File(dir, name + ".png");
     }
 
-    private Bitmap loadFromDisk(String key) {
-        File f = fileFor(key);
+    private Bitmap loadFromDisk(String key, long version) {
+        if (version <= 0) return null;
+        File f = fileFor(key, version);
         if (!f.isFile()) return null;
         try {
             Bitmap b = BitmapFactory.decodeFile(f.getAbsolutePath());
@@ -127,8 +145,9 @@ final class IconCache {
         return null;
     }
 
-    private void saveToDisk(String key, Bitmap b) {
-        File f = fileFor(key);
+    private void saveToDisk(String key, Bitmap b, long version) {
+        if (version <= 0) return;
+        File f = fileFor(key, version);
         File tmp = new File(dir, f.getName() + ".tmp");
         try {
             if (!dir.isDirectory() && !dir.mkdirs()) return;

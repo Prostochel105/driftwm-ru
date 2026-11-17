@@ -79,6 +79,8 @@ final class CanvasView extends View {
     private final ArrayList<String> keys = new ArrayList<>();
     private final ArrayList<String> labels = new ArrayList<>();
     private final ArrayList<Boolean> available = new ArrayList<>();
+    /** Package part of each card key, so drawing does not allocate a substring per frame. */
+    private final ArrayList<String> packages = new ArrayList<>();
     /** Dock slot contents, from the string table: a plain app or a folder. */
     private final String[] slotApp = new String[MAX_SLOTS];
     private final String[] slotFolderName = new String[MAX_SLOTS];
@@ -123,6 +125,23 @@ final class CanvasView extends View {
     private final RectF r2 = new RectF();
     private final android.graphics.Rect srcRect = new android.graphics.Rect();
     private final Path path = new Path();
+
+    // Restrained drag feedback: a slight lift while held, then a short glide into
+    // the slot. No spring and no overshoot.
+    private static final long LIFT_MS = 120L;
+    private static final long SNAP_MS = 170L;
+    private static final float LIFT_SCALE = 0.05f;
+    private static final float LIFT_RISE_DP = 3.0f;
+
+    // Tracked by key, not by list index: dragging reorders the cards, and an
+    // index captured one frame earlier can already point at a different card.
+    private String dragKey;
+    private long dragStartMs;
+    private boolean dragWasGroup;
+    private float dragX, dragY;
+    private String snapKey;
+    private long snapStartMs;
+    private float snapFromX, snapFromY;
 
     CanvasView(Context context, IconCache icons, ThumbCache thumbs) {
         super(context);
@@ -223,7 +242,8 @@ final class CanvasView extends View {
 
     @Override protected void onDraw(Canvas c) {
         Perf.firstDraw();
-        boolean more = Native.tick(SystemClock.uptimeMillis());
+        long now = SystemClock.uptimeMillis();
+        boolean more = Native.tick(now);
         long renderStart = System.nanoTime();
         int n = Native.render(list);
         Perf.frame(System.nanoTime() - renderStart);
@@ -251,11 +271,12 @@ final class CanvasView extends View {
         int nLinks = (int) list[7];
         int nUi = (int) list[8];
         notifyCardVisibility(nCards);
+        updateDragAnimation(nCards, now);
         int linkBase = HEADER + nCards * CARD_STRIDE;
         int uiBase = linkBase + nLinks * LINK_STRIDE;
         drawLinks(c, linkBase, nLinks);
         for (int i = 0; i < nCards; i++) {
-            drawCard(c, HEADER + i * CARD_STRIDE);
+            drawCard(c, HEADER + i * CARD_STRIDE, now);
         }
         drawUi(c, uiBase, nUi);
         c.restore();
@@ -267,7 +288,9 @@ final class CanvasView extends View {
         if (!pendingEvents.isEmpty()) {
             post(deliverEvents);
         }
-        if (more) {
+        boolean animating = snapKey != null
+            || (dragKey != null && now - dragStartMs < LIFT_MS);
+        if (more || animating) {
             postInvalidateOnAnimation();
         }
     }
@@ -289,10 +312,74 @@ final class CanvasView extends View {
         if (host != null) host.onCardsVisibilityChanged(visible, total);
     }
 
+    /**
+     * Tracks the dragged card across frames and starts the short glide after it is
+     * released. A group is left alone: its members are separate cards, so lifting
+     * or gliding only the anchor would pull the stack apart. Group moves stay rigid.
+     */
+    private void updateDragAnimation(int nCards, long now) {
+        String foundKey = null;
+        int foundBase = -1;
+        for (int i = 0; i < nCards; i++) {
+            int b = HEADER + i * CARD_STRIDE;
+            if (((int) list[b + 5] & CARD_DRAGGING) != 0) {
+                foundKey = keyAt((int) list[b]);
+                foundBase = b;
+                break;
+            }
+        }
+        if (foundKey != null) {
+            if (!foundKey.equals(dragKey)) {
+                dragKey = foundKey;
+                dragStartMs = now;
+                dragWasGroup = list[foundBase + 6] >= 0f;
+            }
+            dragX = list[foundBase + 1];
+            dragY = list[foundBase + 2];
+            snapKey = null; // picked up again before the glide ended
+            return;
+        }
+        if (dragKey != null) {
+            // Dropping next to another card forms a group. Then every member is
+            // placed immediately, so gliding only this card would tear the stack.
+            if (!dragWasGroup && !isGrouped(nCards, dragKey)) {
+                snapKey = dragKey;
+                snapStartMs = now;
+                snapFromX = dragX;
+                snapFromY = dragY;
+            }
+            dragKey = null;
+        }
+        if (snapKey != null && now - snapStartMs >= SNAP_MS) {
+            snapKey = null;
+        }
+    }
+
+    /** True when the card is drawn as part of a group right now. */
+    private boolean isGrouped(int nCards, String key) {
+        for (int i = 0; i < nCards; i++) {
+            int b = HEADER + i * CARD_STRIDE;
+            if (key.equals(keyAt((int) list[b]))) {
+                return (int) list[b + 6] >= 0;
+            }
+        }
+        return false;
+    }
+
+    private String keyAt(int idx) {
+        return idx >= 0 && idx < keys.size() ? keys.get(idx) : null;
+    }
+
+    private static float easeOut(float t) {
+        float inv = 1f - Math.max(0f, Math.min(1f, t));
+        return 1f - inv * inv * inv;
+    }
+
     private void refreshTable() {
         keys.clear();
         labels.clear();
         available.clear();
+        packages.clear();
         Arrays.fill(slotApp, null);
         Arrays.fill(slotFolderName, null);
         Arrays.fill(slotFolderApps, null);
@@ -304,6 +391,7 @@ final class CanvasView extends View {
                 keys.add(p[1]);
                 labels.add(p[2]);
                 available.add(p[3].equals("1"));
+                packages.add(ThumbStore.packageOf(p[1]));
             } else if (p.length >= 3 && p[0].equals("d")) {
                 try {
                     int slot = Integer.parseInt(p[1]);
@@ -423,7 +511,7 @@ final class CanvasView extends View {
         }
     }
 
-    private void drawCard(Canvas c, int b) {
+    private void drawCard(Canvas c, int b, long now) {
         int idx = (int) list[b];
         float x = list[b + 1];
         float y = list[b + 2];
@@ -431,18 +519,51 @@ final class CanvasView extends View {
         float h = list[b + 4];
         int flags = (int) list[b + 5];
         int group = (int) list[b + 6];
+        String key = idx >= 0 && idx < keys.size() ? keys.get(idx) : null;
         boolean unavailable = (flags & CARD_UNAVAILABLE) != 0;
         boolean dragging = (flags & CARD_DRAGGING) != 0;
         boolean selected = (flags & CARD_SELECTED) != 0;
+        boolean activeDrag = dragging && key != null && key.equals(dragKey);
+        boolean lift = activeDrag && !dragWasGroup;
+        boolean settling = key != null && key.equals(snapKey);
+
+        float dx = 0f;
+        float dy = 0f;
+        float scale = 1f;
+        if (lift) {
+            float e = easeOut((now - dragStartMs) / (float) LIFT_MS);
+            dy = -LIFT_RISE_DP * e;
+            scale = 1f + LIFT_SCALE * e;
+        } else if (settling) {
+            float left = 1f - easeOut((now - snapStartMs) / (float) SNAP_MS);
+            dx = (snapFromX - x) * left;
+            dy = (snapFromY - y) * left - LIFT_RISE_DP * left;
+            scale = 1f + LIFT_SCALE * left;
+        }
+        boolean elevated = activeDrag || settling;
+        boolean transformed = dx != 0f || dy != 0f || scale != 1f;
+        if (transformed) {
+            c.save();
+            if (dx != 0f || dy != 0f) c.translate(dx, dy);
+            if (scale != 1f) {
+                float cx = x + w / 2f;
+                float cy = y + h / 2f;
+                c.translate(cx, cy);
+                c.scale(scale, scale);
+                c.translate(-cx, -cy);
+            }
+        }
 
         float rad = Math.min(w, h) * 0.16f;
         // Cheap painted shadow instead of a per-card blur.
-        float grow = dragging ? 2.5f : 1.2f;
-        float drop = dragging ? 6f : 2.5f;
-        r.set(x - grow, y - grow + drop, x + w + grow, y + h + grow + drop);
-        c.drawRoundRect(r, rad + grow, rad + grow, dragging ? shadowDragPaint : shadowPaint);
+        if (!elevated) {
+            float grow = 1.2f;
+            float drop = 2.5f;
+            r.set(x - grow, y - grow + drop, x + w + grow, y + h + grow + drop);
+            c.drawRoundRect(r, rad + grow, rad + grow, shadowPaint);
+        }
         r.set(x, y, x + w, y + h);
-        c.drawRoundRect(r, rad, rad, dragging ? cardDragPaint : cardPaint);
+        c.drawRoundRect(r, rad, rad, elevated ? cardDragPaint : cardPaint);
 
         int border = pal.stroke;
         float bw = 1f;
@@ -462,11 +583,11 @@ final class CanvasView extends View {
         stroke.setStrokeWidth(bw);
         c.drawRoundRect(r, rad, rad, stroke);
 
-        String key = idx >= 0 && idx < keys.size() ? keys.get(idx) : null;
         String label = idx >= 0 && idx < labels.size() ? labels.get(idx) : "";
+        String pkg = idx >= 0 && idx < packages.size() ? packages.get(idx) : null;
 
         int alpha = unavailable ? 90 : 255;
-        Bitmap shot = key == null || (flags & CARD_NO_PREVIEW) != 0 ? null : thumbs.get(ThumbStore.packageOf(key));
+        Bitmap shot = key == null || (flags & CARD_NO_PREVIEW) != 0 ? null : thumbs.get(pkg);
         Bitmap icon = key == null ? null : icons.get(key);
         if (shot != null) {
             drawPreview(c, shot, x, y, w, h, rad, alpha);
@@ -519,6 +640,7 @@ final class CanvasView extends View {
             c.drawLine(cx - s, cy - s, cx + s, cy + s, stroke);
             c.drawLine(cx - s, cy + s, cx + s, cy - s, stroke);
         }
+        if (transformed) c.restore();
     }
 
     /**

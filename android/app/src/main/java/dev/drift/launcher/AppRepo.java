@@ -3,6 +3,7 @@ package dev.drift.launcher;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.LauncherActivityInfo;
 import android.content.pm.LauncherApps;
 import android.graphics.Bitmap;
@@ -17,8 +18,10 @@ import android.os.UserManager;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
 /**
@@ -45,8 +48,11 @@ final class AppRepo {
     }
 
     interface Listener {
-        /** Main thread; the list was replaced and pushed to the core. */
-        void onAppsChanged();
+        /**
+         * Main thread; the list was replaced and pushed to the core.
+         * {@code changedIconPackages} holds packages whose icon version changed.
+         */
+        void onAppsChanged(Set<String> changedIconPackages);
     }
 
     private final Context ctx;
@@ -57,6 +63,13 @@ final class AppRepo {
     private volatile Map<String, Entry> entries = new HashMap<>();
     private volatile boolean loaded;
     private final Map<String, Long> iconVersions = new java.util.concurrent.ConcurrentHashMap<>();
+    /**
+     * Icon files are named by package update time. Persisting these timestamps lets
+     * a cold start hit the disk cache immediately, before the app-list query has
+     * even finished: the launcher process is often killed while another app is in
+     * front, and re-asking PackageManager for every icon was why they appeared late.
+     */
+    private final SharedPreferences iconPrefs;
     private Listener listener;
     private boolean refreshQueued;
     private long lastRefreshRequest;
@@ -74,6 +87,12 @@ final class AppRepo {
         ctx = context.getApplicationContext();
         launcherApps = (LauncherApps) ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE);
         userManager = (UserManager) ctx.getSystemService(Context.USER_SERVICE);
+        iconPrefs = ctx.getSharedPreferences("icon_versions", Context.MODE_PRIVATE);
+        for (Map.Entry<String, ?> e : iconPrefs.getAll().entrySet()) {
+            if (e.getValue() instanceof Number) {
+                iconVersions.put(e.getKey(), ((Number) e.getValue()).longValue());
+            }
+        }
     }
 
     void setListener(Listener l) {
@@ -148,11 +167,21 @@ final class AppRepo {
             }
             String[] k = keys.toArray(new String[0]);
             String[] l = labels.toArray(new String[0]);
-            java.util.Set<String> pkgs = new java.util.HashSet<>();
+            Set<String> pkgs = new HashSet<>();
             for (Entry en : map.values()) {
                 // Our own screens are never preview targets.
                 if (!en.component.getPackageName().equals(ctx.getPackageName())) pkgs.add(en.component.getPackageName());
             }
+            // Refresh the update time of every installed package. This runs on the
+            // worker thread, and the list is re-queried rarely (start, package
+            // events, at most once a minute on resume), so the cost is invisible
+            // to the user while an updated app is guaranteed to get a fresh icon.
+            Map<String, Long> fresh = new HashMap<>();
+            for (String pkg : pkgs) {
+                long version = queryIconVersion(pkg);
+                if (version > 0) fresh.put(pkg, version);
+            }
+            final Map<String, Long> versions = fresh;
             main.post(() -> {
                 ThumbStore.setKnownPackages(pkgs);
                 if (!sameApps(entries, map)) {
@@ -160,14 +189,35 @@ final class AppRepo {
                     Native.setApps(k, l);
                 }
                 loaded = true;
-                iconVersions.clear();
+                Set<String> changed = rememberIconVersions(versions);
                 Perf.mark("apps loaded (" + map.size() + ")");
                 // Notify even when the list is unchanged: the first query may
                 // complete after the cards were already drawn, and their icon
                 // requests were deliberately skipped until now.
-                if (listener != null) listener.onAppsChanged();
+                if (listener != null) listener.onAppsChanged(changed);
             });
         });
+    }
+
+    /**
+     * Stores the package update times that name the icon cache files. Returns the
+     * packages whose version actually changed, so only their icons are evicted.
+     */
+    private Set<String> rememberIconVersions(Map<String, Long> versions) {
+        Set<String> changed = new HashSet<>();
+        SharedPreferences.Editor edit = null;
+        for (Map.Entry<String, Long> en : versions.entrySet()) {
+            long version = en.getValue();
+            if (version <= 0) continue;
+            Long old = iconVersions.put(en.getKey(), version);
+            if (old == null || old.longValue() != version) {
+                changed.add(en.getKey());
+                if (edit == null) edit = iconPrefs.edit();
+                edit.putLong(en.getKey(), version);
+            }
+        }
+        if (edit != null) edit.apply();
+        return changed;
     }
 
     private static boolean sameApps(Map<String, Entry> a, Map<String, Entry> b) {
@@ -206,22 +256,37 @@ final class AppRepo {
         }
     }
 
-    /** Changing value that invalidates a cached icon (app update time), 0 if unknown. */
+    /**
+     * Changing value that invalidates a cached icon (app update time), 0 if unknown.
+     * Derived from the key itself, so a cold start can find disk icons before the
+     * app-list query has published {@link Entry} objects.
+     */
     long iconVersion(String key) {
-        Entry e = entries.get(key);
-        if (e == null) return 0L;
-        String pkg = e.component.getPackageName();
+        if (key == null) return 0L;
+        String pkg = ThumbStore.packageOf(key);
         Long known = iconVersions.get(pkg);
         if (known != null) return known;
-        long version = 0L;
-        try {
-            android.content.pm.PackageInfo pi = ctx.getPackageManager().getPackageInfo(pkg, 0);
-            version = pi.lastUpdateTime;
-        } catch (Exception ex) {
-            version = 0L;
+        long version = queryIconVersion(pkg);
+        if (version > 0) {
+            iconVersions.put(pkg, version);
+            iconPrefs.edit().putLong(pkg, version).apply();
         }
-        iconVersions.put(pkg, version);
         return version;
+    }
+
+    /** Known version without touching PackageManager; 0 when it has not been learned yet. */
+    long cachedIconVersion(String key) {
+        if (key == null) return 0L;
+        Long known = iconVersions.get(ThumbStore.packageOf(key));
+        return known == null ? 0L : known;
+    }
+
+    private long queryIconVersion(String pkg) {
+        try {
+            return ctx.getPackageManager().getPackageInfo(pkg, 0).lastUpdateTime;
+        } catch (Exception ex) {
+            return 0L;
+        }
     }
 
     /** Renders the app icon; call off the main thread. */

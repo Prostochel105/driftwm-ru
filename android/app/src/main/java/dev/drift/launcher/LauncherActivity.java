@@ -155,7 +155,8 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
             drawer.iconsLoaded();
             folder.iconsLoaded();
         });
-        repo.setListener(() -> {
+        repo.setListener(changedIcons -> {
+            icons.invalidate(changedIcons);
             icons.retry();
             drawer.refresh();
             folder.refresh();
