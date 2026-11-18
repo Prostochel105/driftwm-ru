@@ -87,7 +87,7 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           else
-            echo "name=V5.6.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "name=V5.6.1.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build release APK

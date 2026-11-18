@@ -21,7 +21,7 @@ Based on upstream **V5**. Licensed under **GPL-3.0**, same as the original.
 ![platform](https://img.shields.io/badge/platform-arm64--v8a-informational)
 ![android](https://img.shields.io/badge/Android-11%2B-informational)
 
-**[⬇ Download the latest APK](https://github.com/Prostochel105/driftwm-ru/releases/latest)** — always the newest build.
+**[⬇ Download the latest APK](https://github.com/Prostochel105/driftwm-ru/releases/latest)** — always the newest build (currently **V5.6.1**).
 
 | | |
 |---|---|

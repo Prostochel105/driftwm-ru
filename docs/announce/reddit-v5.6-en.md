@@ -1,7 +1,7 @@
-# Reddit announcement — DriftWM RU V5.6
+# Reddit announcement — DriftWM RU V5.6.1
 
 Suggested subreddits: r/androidapps, r/Android, r/fossdroid.
-Suggested title: **I made a Russian fork of a launcher with an infinite canvas and cards instead of icons — folders in the dock now work properly**
+Suggested title: **I made a Russian fork of a launcher with an infinite canvas and cards instead of icons — it's smooth as butter now**
 
 ---
 
@@ -9,29 +9,29 @@ Hey r/androidapps!
 
 I've been maintaining a Russian fork of **DriftWM for Android** — a launcher where
 your home screen is an infinite canvas with app *cards* instead of a rigid icon
-grid. Today I'm releasing **V5.6**.
+grid. I'm releasing **V5.6.1**, a performance and animation update on top of V5.6.
 
 **What it is**
 
 - An endless canvas: pan and zoom freely, group cards together, resize them.
-- A dock with 3–8 slots, now with **real folders**.
+- A dock with 3–8 slots, with real folders you can drag icons around in.
 - A settings screen with a live preview, six themes, background pictures
   (static or infinite tile), and an accent colour that recolours the whole UI.
 - Full Russian UI that follows your system language (English falls back naturally).
 - Rust core over JNI for the workspace model, gestures, snapping and persistence.
 
-**New in V5.6**
+**New in V5.6.1**
 
-- **Empty folders in the dock.** Long-press an empty slot to create one; it opens
-  right away with a free "+" slot.
-- **Drag icons inside a folder.** Long-press an app to highlight it and open its
-  menu; start moving and the icon follows your finger. Drop it on another tile to
-  reorder, or on the dimmed area to take it out.
-- **Big folders scroll**, removing a folder's last app leaves the folder with a
-  free slot, and shrinking the dock asks for confirmation instead of silently
-  dropping your apps.
-- Release build, `versionCode` starting at 101, state format v2 (old layouts still
-  load).
+- **Butter-smooth panning.** Removed the per-card blur shadows and thousands of
+  per-frame point draws that capped the canvas at ~30 fps. Touch redraws are now
+  synced to the display frame, so several move events collapse into one frame.
+- **Satisfying drag animations.** A held card lifts and scales slightly, then
+  glides into place when released (no spring, no bounce). Inside folders, an
+  accent divider shows the insertion slot and icons swap places *live* while you
+  drag, easing into their new positions.
+- **Icons are there when you get home.** Disk-cache versions survive restarts, so
+  a cold start loads them immediately instead of waiting on PackageManager.
+- All core toasts translated to Russian; clippy warning cleaned up.
 
 **Download**
 

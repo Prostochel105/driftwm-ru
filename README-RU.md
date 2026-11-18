@@ -19,7 +19,7 @@
 ![platform](https://img.shields.io/badge/platform-arm64--v8a-informational)
 ![android](https://img.shields.io/badge/Android-11%2B-informational)
 
-**[⬇ Скачать последний APK](https://github.com/Prostochel105/driftwm-ru/releases/latest)** — всегда свежая версия.
+**[⬇ Скачать последний APK](https://github.com/Prostochel105/driftwm-ru/releases/latest)** — всегда свежая версия (сейчас **V5.6.1**).
 
 | | |
 |---|---|
