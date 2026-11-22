@@ -158,6 +158,9 @@ public final class LauncherActivity extends Activity implements CanvasView.Host,
         repo.setListener(changedIcons -> {
             icons.invalidate(changedIcons);
             icons.retry();
+            // Re-render all cached icons with the fresh LauncherActivityInfo so a
+            // themed/default grey robot drawn from stale Resources gets replaced.
+            icons.refreshAll();
             drawer.refresh();
             folder.refresh();
             canvas.invalidate();

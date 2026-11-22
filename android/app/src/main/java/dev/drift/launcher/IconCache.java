@@ -127,6 +127,26 @@ final class IconCache {
         deferred.clear();
     }
 
+    /**
+     * Re-render every cached icon with the current LauncherActivityInfo and
+     * replace it atomically (old bitmap stays visible until the fresh one is
+     * ready). This clears themed/default grey robots that were rendered from a
+     * stale info object, without flashing a placeholder.
+     */
+    void refreshAll() {
+        final java.util.List<String> keys = new java.util.ArrayList<>(cache.snapshot().keySet());
+        failed.clear();
+        deferred.clear();
+        for (final String key : keys) {
+            worker.execute(() -> {
+                Bitmap fresh = repo.renderIcon(key, sizePx);
+                if (fresh == null) return;
+                final Bitmap result = fresh;
+                main.post(() -> cache.put(key, result));
+            });
+        }
+    }
+
     /** Drops cached icons of packages whose update time changed. Main thread only. */
     void invalidate(Set<String> packages) {
         if (packages == null || packages.isEmpty()) return;

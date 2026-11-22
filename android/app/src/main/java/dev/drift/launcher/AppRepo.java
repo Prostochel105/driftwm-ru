@@ -190,10 +190,12 @@ final class AppRepo {
                 // LauncherActivityInfo returns the grey default icon after an app
                 // update, so keeping it is what made icons turn into grey robots.
                 boolean listChanged = !sameApps(entries, map);
-                if (listChanged || !changed.isEmpty()) {
-                    entries = map;
-                    if (listChanged) Native.setApps(k, l);
-                }
+                // Always publish fresh Entry objects (with fresh LauncherActivityInfo)
+                // after any app-list refresh. A stale LauncherActivityInfo can keep
+                // returning the themed/default grey robot long after an app update,
+                // even when lastUpdateTime did not change (system/Play apps).
+                entries = map;
+                if (listChanged) Native.setApps(k, l);
                 loaded = true;
                 Perf.mark("apps loaded (" + map.size() + ")");
                 // Notify even when the list is unchanged: the first query may
@@ -299,11 +301,10 @@ final class AppRepo {
         Entry e = entries.get(key);
         if (e == null) return null;
         try {
-            // Ask PackageManager for a fresh drawable every time. LauncherActivityInfo
-            // can hold stale Resources after an app update and return the grey
-            // default icon; getApplicationIcon re-reads the current icon resource.
-            Drawable d = ctx.getPackageManager().getApplicationIcon(e.component.getPackageName());
-            if (d == null) d = e.info.getIcon(0);
+            Drawable d = e.info.getIcon(0);
+            if (d == null) {
+                d = ctx.getPackageManager().getApplicationIcon(e.component.getPackageName());
+            }
             if (d == null) return null;
             Bitmap bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
             Canvas c = new Canvas(bmp);
