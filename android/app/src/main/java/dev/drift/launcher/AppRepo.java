@@ -184,12 +184,17 @@ final class AppRepo {
             final Map<String, Long> versions = fresh;
             main.post(() -> {
                 ThumbStore.setKnownPackages(pkgs);
-                if (!sameApps(entries, map)) {
+                Set<String> changed = rememberIconVersions(versions);
+                // Refresh the Entry objects (and their LauncherActivityInfo) whenever
+                // the installed set changed OR an icon version changed. A stale
+                // LauncherActivityInfo returns the grey default icon after an app
+                // update, so keeping it is what made icons turn into grey robots.
+                boolean listChanged = !sameApps(entries, map);
+                if (listChanged || !changed.isEmpty()) {
                     entries = map;
-                    Native.setApps(k, l);
+                    if (listChanged) Native.setApps(k, l);
                 }
                 loaded = true;
-                Set<String> changed = rememberIconVersions(versions);
                 Perf.mark("apps loaded (" + map.size() + ")");
                 // Notify even when the list is unchanged: the first query may
                 // complete after the cards were already drawn, and their icon

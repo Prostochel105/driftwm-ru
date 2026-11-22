@@ -64,7 +64,9 @@ final class IconCache {
     Bitmap get(String key) {
         if (key == null) return null;
         Bitmap b = cache.get(key);
-        if (b == null && deferred.contains(key)) return null;
+        // A deferred key is retried as soon as its version becomes known; do not
+        // keep showing a placeholder while PackageManager can already render it.
+        if (b == null && deferred.contains(key) && repo.cachedIconVersion(key) <= 0) return null;
         // On a cold start the cards are drawn before the app list is ready. If a
         // previous run persisted the package's update time, the disk file name is
         // already known and the icon can load in parallel with the list query.
@@ -76,6 +78,7 @@ final class IconCache {
             failed.remove(key);
         }
         if (b == null && !failed.contains(key) && pending.add(key)) {
+            deferred.remove(key); // version may have arrived since we deferred
             worker.execute(() -> {
                 long version = repo.iconVersion(key);
                 Bitmap loaded = loadFromDisk(key, version);
@@ -92,11 +95,16 @@ final class IconCache {
                     if (result == null) {
                         // Missing before the app list arrived is not a failure: wait
                         // for the list, otherwise every frame would retry the worker.
-                        if (!repo.isLoaded()) deferred.add(key);
+                        if (!repo.isLoaded() || current <= 0) deferred.add(key);
                         else failed.add(key);
                     } else if (loadedVersion > 0 && current > 0 && current != loadedVersion) {
                         // The app was updated while this icon was loading. Leave the
                         // stale bitmap out; the next draw requests the new version.
+                    } else if (loadedVersion <= 0 || current <= 0) {
+                        // Version unknown: the rendered drawable may be the grey
+                        // default icon (app mid-update). Do not cache it; retry on a
+                        // later draw once the version -- and a real icon -- appears.
+                        deferred.add(key);
                     } else {
                         cache.put(key, result);
                     }
