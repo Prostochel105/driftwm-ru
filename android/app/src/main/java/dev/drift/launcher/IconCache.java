@@ -82,10 +82,16 @@ final class IconCache {
             worker.execute(() -> {
                 long version = repo.iconVersion(key);
                 Bitmap loaded = loadFromDisk(key, version);
-                if (loaded == null && repo.isLoaded()) {
-                    loaded = repo.renderIcon(key, sizePx);
-                    // Never write under version 0: that file could never be found again.
-                    if (loaded != null && version > 0) saveToDisk(key, loaded, version);
+                // Disk is only a cold-start shortcut (before the app list arrives).
+                // Once the list is ready, ALWAYS render fresh: a grey default icon
+                // that was once written to disk would otherwise be reused forever.
+                if (repo.isLoaded()) {
+                    Bitmap fresh = repo.renderIcon(key, sizePx);
+                    if (fresh != null) {
+                        loaded = fresh;
+                        // Overwrite any stale/bad file stored under this version.
+                        if (version > 0) saveToDisk(key, fresh, version);
+                    }
                 }
                 final Bitmap result = loaded;
                 final long loadedVersion = version;

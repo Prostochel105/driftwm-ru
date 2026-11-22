@@ -299,14 +299,18 @@ final class AppRepo {
         Entry e = entries.get(key);
         if (e == null) return null;
         try {
-            Drawable d = e.info.getIcon(0);
+            // Ask PackageManager for a fresh drawable every time. LauncherActivityInfo
+            // can hold stale Resources after an app update and return the grey
+            // default icon; getApplicationIcon re-reads the current icon resource.
+            Drawable d = ctx.getPackageManager().getApplicationIcon(e.component.getPackageName());
+            if (d == null) d = e.info.getIcon(0);
             if (d == null) return null;
             Bitmap bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
             Canvas c = new Canvas(bmp);
             d.setBounds(0, 0, sizePx, sizePx);
             d.draw(c);
             return bmp;
-        } catch (RuntimeException ex) {
+        } catch (RuntimeException | android.content.pm.PackageManager.NameNotFoundException ex) {
             return null;
         }
     }
