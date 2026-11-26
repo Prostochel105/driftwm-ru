@@ -141,6 +141,10 @@ final class IconCache {
             worker.execute(() -> {
                 Bitmap fresh = repo.renderIcon(key, sizePx);
                 if (fresh == null) return;
+                long version = repo.iconVersion(key);
+                // Overwrite the bad PNG too, so a cold start does not bring the
+                // robot back from disk.
+                if (version > 0) saveToDisk(key, fresh, version);
                 final Bitmap result = fresh;
                 main.post(() -> cache.put(key, result));
             });

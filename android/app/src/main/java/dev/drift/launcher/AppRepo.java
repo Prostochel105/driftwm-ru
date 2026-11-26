@@ -300,19 +300,63 @@ final class AppRepo {
     Bitmap renderIcon(String key, int sizePx) {
         Entry e = entries.get(key);
         if (e == null) return null;
+        android.content.pm.PackageManager pm = ctx.getPackageManager();
         try {
-            Drawable d = e.info.getIcon(0);
-            if (d == null) {
-                d = ctx.getPackageManager().getApplicationIcon(e.component.getPackageName());
+            // Try several icon sources. Some firmwares/themed-icon packs return the
+            // generic "robot" from LauncherActivityInfo for certain apps; the raw
+            // ApplicationInfo icon is often the real one.
+            Drawable[] sources = new Drawable[3];
+            sources[0] = e.info.getIcon(0);
+            try { sources[1] = pm.getApplicationIcon(e.component.getPackageName()); }
+            catch (Exception ignored) {}
+            try { sources[2] = e.info.getApplicationInfo().loadIcon(pm); }
+            catch (Exception ignored) {}
+            Bitmap fallback = renderDefault(pm, sizePx);
+            for (Drawable d : sources) {
+                if (d == null) continue;
+                Bitmap bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+                Canvas c = new Canvas(bmp);
+                d.setBounds(0, 0, sizePx, sizePx);
+                d.draw(c);
+                // Skip the generic default/robot icon — never cache it.
+                if (fallback != null && similar(bmp, fallback)) continue;
+                return bmp;
             }
-            if (d == null) return null;
+            return null; // every source returned the default robot; retry later
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
+    private static Bitmap renderDefault(android.content.pm.PackageManager pm, int sizePx) {
+        try {
+            Drawable d = pm.getDefaultActivityIcon();
             Bitmap bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
             Canvas c = new Canvas(bmp);
             d.setBounds(0, 0, sizePx, sizePx);
             d.draw(c);
             return bmp;
-        } catch (RuntimeException | android.content.pm.PackageManager.NameNotFoundException ex) {
+        } catch (RuntimeException ex) {
             return null;
         }
+    }
+
+    /** Coarse RGB comparison: true when two icons are essentially the same image. */
+    private static boolean similar(Bitmap a, Bitmap b) {
+        if (a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) return false;
+        int n = 8;
+        long diff = 0;
+        for (int gy = 0; gy < n; gy++) {
+            for (int gx = 0; gx < n; gx++) {
+                int x = gx * a.getWidth() / n + a.getWidth() / (n * 2);
+                int y = gy * a.getHeight() / n + a.getHeight() / (n * 2);
+                int pa = a.getPixel(x, y);
+                int pb = b.getPixel(x, y);
+                diff += Math.abs(((pa >> 16) & 0xFF) - ((pb >> 16) & 0xFF));
+                diff += Math.abs(((pa >> 8) & 0xFF) - ((pb >> 8) & 0xFF));
+                diff += Math.abs((pa & 0xFF) - (pb & 0xFF));
+            }
+        }
+        return diff / (n * n * 3) < 45;
     }
 }
